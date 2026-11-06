@@ -10,7 +10,7 @@ export interface Scope {
   epic?: string;
 }
 
-export type View = 'board' | 'list' | 'next';
+export type View = 'board' | 'list' | 'next' | 'standup';
 
 function useBoardState() {
   const board = useBoard();

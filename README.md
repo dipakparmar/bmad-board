@@ -23,6 +23,8 @@ Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-s
   - Every ticket offers its next **hand-off**: a ready-to-paste prompt for the right BMAD skill (`bmad-build`, `bmad-build-auto`, `bmad-agent-po`, `bmad-code-review`).
   - A **recent activity** feed lists the commits that touched the tickets, and marks which came from agents and which from people.
 
+- **Stand-up** gives one card per person and agent. Each card shows what they finished since the last working day (from git), what they're on, what waits on review, and what blocks them. **Run stand-up** walks the team one member at a time with a timer, ending on unowned and up-for-grabs work. **Copy notes** gives markdown for your team channel.
+
 - **Board and list views** of every initiative, epic and backlog ticket, in the Kaneo layout. Each card shows readiness the way BMAD's own `tickets.py next` reports it: ready, blocked (and on what), or needs refining.
 - **Drag a card between lanes** to set its status, or pick one in the ticket sheet. **Drag rows in the list** to change an epic's build order.
 - **Edit tickets.** You can change the description, risk, needs-a-person and assignee, and block or unblock a ticket with a reason.
