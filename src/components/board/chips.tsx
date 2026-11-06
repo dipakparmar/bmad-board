@@ -1,6 +1,6 @@
 /** Small pieces shared by cards, rows and the ticket sheet. Chip styling follows Kaneo's task chips. */
 import { Ban, Bug, CheckCircle2, Circle, CircleDashed, CircleDot, FlaskConical, Hand, Sparkles, Timer, UserRound } from 'lucide-react';
-import type { BoardState, Leaf, LeafStatus } from '@/domain';
+import { HITL_LABEL, RISK_LABELS, SEVERITY_LABELS, STATUS_LABELS, TYPE_LABELS, type BoardState, type Leaf, type LeafStatus } from '@/domain';
 import type { Readiness } from '@/app/view-model';
 import { cn } from '@/lib/cn';
 
@@ -15,16 +15,7 @@ export const COLUMN_META: Record<BoardState, { label: string; icon: typeof Circl
   dropped: { label: 'Dropped', icon: Ban, tone: 'text-muted-foreground' },
 };
 
-export const STATUS_HELP: Record<LeafStatus, string> = {
-  draft: 'Build agent is drafting the plan',
-  'ready-for-dev': 'Plan is ready to build',
-  'in-progress': 'Being built',
-  'in-review': 'Built, in code review',
-  built: 'Build finished; waiting for a person to call it done',
-  done: 'A person checked it and called it done',
-  blocked: 'Waiting on a person or an answer',
-  dropped: 'Not going to be built',
-};
+export const STATUS_HELP: Record<LeafStatus, string> = Object.fromEntries(Object.entries(STATUS_LABELS).filter(([k]) => k).map(([k, v]) => [k, v.help])) as Record<LeafStatus, string>;
 
 export function StateIcon({ state, className }: { state: BoardState; className?: string }) {
   const { icon: Icon, tone } = COLUMN_META[state];
@@ -33,9 +24,9 @@ export function StateIcon({ state, className }: { state: BoardState; className?:
 
 export function StatusLabel({ leaf }: { leaf: Leaf }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title={`${STATUS_LABELS[leaf.status].help} (status: ${leaf.status || 'none'})`}>
       <StateIcon state={leaf.state} className="size-3.5" />
-      {leaf.status || 'planned'}
+      {STATUS_LABELS[leaf.status].label}
     </span>
   );
 }
@@ -57,17 +48,18 @@ export function ReadinessChip({ readiness, title }: { readiness: Readiness; titl
 export function TypeChip({ leaf }: { leaf: Leaf }) {
   if (leaf.type === 'story') return null;
   const Icon = leaf.type === 'bug' ? Bug : FlaskConical;
-  return <span className={taskChipClass}><Icon />{leaf.type}{leaf.file?.severity ? ` ${leaf.file.severity}` : ''}</span>;
+  const sev = leaf.file?.severity;
+  return <span className={taskChipClass} title={[TYPE_LABELS[leaf.type].help, sev && SEVERITY_LABELS[sev].help].filter(Boolean).join(' ')}><Icon />{TYPE_LABELS[leaf.type].label}{sev ? ` · ${SEVERITY_LABELS[sev].label}` : ''}</span>;
 }
 
 export function RiskChip({ leaf }: { leaf: Leaf }) {
   if (!leaf.risk || leaf.risk === 'low') return null;
-  return <span className={cn(taskChipClass, leaf.risk === 'high' && 'border-destructive/30 text-destructive')}><Sparkles />{leaf.risk} risk</span>;
+  return <span title={RISK_LABELS[leaf.risk].help} className={cn(taskChipClass, leaf.risk === 'high' && 'border-destructive/30 text-destructive')}><Sparkles />{RISK_LABELS[leaf.risk].label}</span>;
 }
 
 export function HitlChip({ leaf }: { leaf: Leaf }) {
   if (!leaf.hitl) return null;
-  return <span className={taskChipClass} title="A person does part of this work"><Hand />needs a person</span>;
+  return <span className={taskChipClass} title={HITL_LABEL.help}><Hand />{HITL_LABEL.label}</span>;
 }
 
 export function Assignee({ name, className }: { name?: string; className?: string }) {

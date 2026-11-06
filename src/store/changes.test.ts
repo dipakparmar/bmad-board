@@ -57,6 +57,14 @@ describe('FileTicketStore.apply', () => {
     expect(data).toEqual({ title: 'Pick a tax provider', ticket: 3, assignee: 'Priya' });
   });
 
+  test('stand-up notes are written under the output folder only', async () => {
+    const { src, store } = await setup();
+    await store.apply([{ kind: 'standup-notes', path: '_bmad-output/standups/standup-2026-11-09.md', text: '## Stand-up' }], person);
+    expect(await src.read('_bmad-output/standups/standup-2026-11-09.md')).toBe('## Stand-up\n');
+    expect(src.commits.at(-1)?.message).toStartWith('chore(tickets): stand-up notes 2026-11-09');
+    await expect(store.apply([{ kind: 'standup-notes', path: 'README.md', text: 'x' }], person)).rejects.toThrow('stand-up notes go under');
+  });
+
   test('clear-block removes the block fields', async () => {
     const { src, store } = await setup();
     await store.apply([{ kind: 'mark', key: 'epic-pricing-rules/2', status: 'blocked', blockedReason: 'x' }], person);

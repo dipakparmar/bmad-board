@@ -5,3 +5,4 @@ export * from './ticket-store';
 export * from './agent-loop';
 export * from './standup';
 export * from './people';
+export * from './labels';

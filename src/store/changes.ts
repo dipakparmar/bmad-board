@@ -95,6 +95,12 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
         }
         break;
       }
+      case 'standup-notes': {
+        const prefix = `${tree.outputFolder.replace(/\/+$/, '')}/standups/`;
+        if (!change.path.startsWith(prefix) || change.path.includes('..') || !change.path.endsWith('.md')) throw new ChangeError(`stand-up notes go under ${prefix}`);
+        write(change.path, change.text.endsWith('\n') ? change.text : `${change.text}\n`);
+        break;
+      }
       case 'clear-block': {
         const leaf = leafOf(change.key);
         const path = planPath(leaf, tree);

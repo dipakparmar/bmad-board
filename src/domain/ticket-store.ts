@@ -29,6 +29,8 @@ export interface ChangeAuthor {
 export type TicketChange =
   | { kind: 'mark'; key: TicketKey; status: LeafStatus; assignee?: string; blockedReason?: string }
   | { kind: 'clear-block'; key: TicketKey }
+  /** Writes a day's stand-up notes to `<output>/standups/standup-<date>.md`. */
+  | { kind: 'standup-notes'; path: string; text: string }
   /** Sets or clears only the assignee; status and any block stay as they are. */
   | { kind: 'assign'; key: TicketKey; assignee: string }
   | { kind: 'edit-entry'; key: TicketKey; patch: Partial<Omit<BreakdownEntry, 'id'>> }

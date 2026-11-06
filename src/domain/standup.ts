@@ -125,10 +125,38 @@ export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T
   return { since, members: ordered, upForGrabs, unowned };
 }
 
-/** Stand-up notes as markdown, to paste in a team channel. */
-export function standupNotes<T extends { leaf: Leaf }>(s: Standup<T>, refOf: (t: T) => string): string {
+/** What the person running the stand-up wrote: one note per member (by member id) and one for the team. */
+export interface StandupNotes {
+  members: Record<string, string>;
+  team: string;
+}
+
+/** Where a day's stand-up notes live, so they are versioned with the tickets and agents can read them. */
+export function standupNotesPath(outputFolder: string, day: Date): string {
+  const d = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  return `${outputFolder.replace(/\/+$/, '')}/standups/standup-${d}.md`;
+}
+
+/** Reads the notes back out of a saved stand-up file (the `- **Notes:**` lines and the team section). */
+export function parseStandupNotes(text: string, members: { id: string; name: string }[]): StandupNotes {
+  const out: StandupNotes = { members: {}, team: '' };
+  const sections = text.split(/^### /m).slice(1);
+  for (const sec of sections) {
+    const [head = '', ...rest] = sec.split('\n');
+    const name = head.replace(/\s*\(agent\)\s*$/, '').trim();
+    const m = members.find((x) => x.name === name) ?? { id: name.toLowerCase() };
+    const note = /^- \*\*Notes:\*\* ([\s\S]*?)(?=^- \*\*|^## |(?![\s\S]))/m.exec(rest.join('\n'))?.[1]?.trim();
+    if (note) out.members[m.id] = note.replace(/\n  /g, '\n');
+  }
+  const team = /^## Team notes\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text)?.[1]?.trim();
+  if (team) out.team = team;
+  return out;
+}
+
+/** Stand-up notes as markdown, to paste in a team channel or save beside the tickets. */
+export function standupNotes<T extends { leaf: Leaf }>(s: Standup<T>, refOf: (t: T) => string, notes?: StandupNotes, title = 'Stand-up'): string {
   const line = (t: T) => `${refOf(t)} ${t.leaf.title}`;
-  const out = [`## Stand-up · since ${s.since.toDateString()}`];
+  const out = [`## ${title} · since ${s.since.toDateString()}`];
   for (const m of s.members) {
     out.push('', `### ${m.name}${m.agent ? ' (agent)' : ''}`);
     const done = m.finished.length ? m.finished.map(line) : m.commits.slice(0, 5).map((c) => c.subject);
@@ -136,8 +164,11 @@ export function standupNotes<T extends { leaf: Leaf }>(s: Standup<T>, refOf: (t:
     const doing = [...m.doing.map(line), ...m.review.map((t) => `${line(t)} (in review)`)];
     out.push(`- **Doing:** ${doing.length ? doing.join('; ') : 'nothing'}`);
     if (m.blocked.length) out.push(`- **Blocked:** ${m.blocked.map((t) => `${line(t)}${t.leaf.plan?.blockedReason ? `: ${t.leaf.plan.blockedReason}` : ''}`).join('; ')}`);
+    const note = notes?.members[m.id]?.trim();
+    if (note) out.push(`- **Notes:** ${note.replace(/\n/g, '\n  ')}`);
   }
   if (s.unowned.length) out.push('', `**Needs an owner:** ${s.unowned.map(line).join('; ')}`);
   if (s.upForGrabs.length) out.push('', `**Up for grabs:** ${s.upForGrabs.map(line).join('; ')}`);
+  if (notes?.team.trim()) out.push('', '## Team notes', notes.team.trim());
   return out.join('\n');
 }

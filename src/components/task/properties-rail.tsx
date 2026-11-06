@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { applyWithToast, setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import type { Ticket } from '@/app/view-model';
-import { LEAF_STATUSES, type LeafStatus, type Risk, type TicketChange } from '@/domain';
+import { HITL_LABEL, LEAF_STATUSES, RISK_LABELS, SEVERITY_LABELS, statusLabel, TYPE_LABELS, type LeafStatus, type Risk, type TicketChange } from '@/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,14 +35,14 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
       <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Properties</h3>
       <Row label="Status">
         {ro ? (
-          <span className="inline-flex items-center gap-1.5"><StateIcon state={leaf.state} className="size-3.5" />{leaf.status || 'planned'}</span>
+          <span className="inline-flex items-center gap-1.5"><StateIcon state={leaf.state} className="size-3.5" />{statusLabel(leaf.status)}</span>
         ) : (
           <Select value={leaf.status || null} onValueChange={(v) => typeof v === 'string' && void setStatus(state, ticket, v as LeafStatus)}>
-            <SelectTrigger size="sm" className="w-full" aria-label="Status"><SelectValue>{leaf.status || 'planned'}</SelectValue></SelectTrigger>
+            <SelectTrigger size="sm" className="w-full" aria-label="Status"><SelectValue>{statusLabel(leaf.status)}</SelectValue></SelectTrigger>
             <SelectPopup>
               {LEAF_STATUSES.map((s) => (
                 <SelectItem key={s} value={s}>
-                  <span className="flex flex-col"><span>{s}</span><span className="text-[11px] text-muted-foreground">{STATUS_HELP[s]}</span></span>
+                  <span className="flex flex-col"><span>{statusLabel(s)} <span className="font-mono text-[10px] text-muted-foreground">{s}</span></span><span className="text-[11px] text-muted-foreground">{STATUS_HELP[s]}</span></span>
                 </SelectItem>
               ))}
             </SelectPopup>
@@ -59,21 +59,21 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
         )}
       </Row>
       <Row label="Risk">
-        {ro || !hasEntry ? (leaf.risk ?? 'Not set') : (
-          <Select value={leaf.risk ?? null} onValueChange={(v) => typeof v === 'string' && void edit({ kind: 'edit-entry', key: leaf.key, patch: { risk: v as Risk } }, `${ticket.ref} risk set to ${v}`)}>
-            <SelectTrigger size="sm" className="w-full" aria-label="Risk"><SelectValue>{leaf.risk ?? 'Not set'}</SelectValue></SelectTrigger>
-            <SelectPopup>{['low', 'medium', 'high'].map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectPopup>
+        {ro || !hasEntry ? (leaf.risk ? RISK_LABELS[leaf.risk].label : 'Not set') : (
+          <Select value={leaf.risk ?? null} onValueChange={(v) => typeof v === 'string' && void edit({ kind: 'edit-entry', key: leaf.key, patch: { risk: v as Risk } }, `${ticket.ref} is now ${RISK_LABELS[v as Risk].label.toLowerCase()}`)}>
+            <SelectTrigger size="sm" className="w-full" aria-label="Risk"><SelectValue>{leaf.risk ? RISK_LABELS[leaf.risk].label : 'Not set'}</SelectValue></SelectTrigger>
+            <SelectPopup>{(['low', 'medium', 'high'] as const).map((r) => <SelectItem key={r} value={r}><span className="flex flex-col"><span>{RISK_LABELS[r].label}</span><span className="text-[11px] text-muted-foreground">{RISK_LABELS[r].help}</span></span></SelectItem>)}</SelectPopup>
           </Select>
         )}
       </Row>
-      <Row label="Needs a person">
+      <Row label={HITL_LABEL.label}>
         {ro || !hasEntry ? (leaf.hitl ? 'Yes' : 'No') : (
           <Button size="xs" variant="outline" onClick={() => void edit({ kind: 'edit-entry', key: leaf.key, patch: { hitl: !leaf.hitl } }, `${ticket.ref} ${leaf.hitl ? 'no longer needs' : 'now needs'} a person`)}>
             {leaf.hitl ? 'Yes' : 'No'}
           </Button>
         )}
       </Row>
-      <Row label="Type">{leaf.type}{leaf.file?.severity ? ` · ${leaf.file.severity}` : ''}</Row>
+      <Row label="Type"><span title={TYPE_LABELS[leaf.type].help}>{TYPE_LABELS[leaf.type].label}</span>{leaf.file?.severity ? <span title={SEVERITY_LABELS[leaf.file.severity].help}> · {SEVERITY_LABELS[leaf.file.severity].label} ({leaf.file.severity})</span> : ''}</Row>
       <Row label="Epic">{ticket.epic?.title ?? (leaf.folder === 'backlog' ? 'Backlog' : ticket.initiative?.title)}</Row>
       {leaf.entry?.covers.length ? <Row label="Covers">{leaf.entry.covers.join(', ')}</Row> : null}
       {leaf.plan?.baselineRevision && <Row label="Baseline"><code className="font-mono text-xs">{leaf.plan.baselineRevision}</code></Row>}

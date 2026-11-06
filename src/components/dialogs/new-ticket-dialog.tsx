@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { applyWithToast } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
-import type { LeafType, Risk } from '@/domain';
+import { RISK_LABELS, TYPE_LABELS, type LeafType, type Risk } from '@/domain';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -83,8 +83,8 @@ export function NewTicketDialog() {
                   </Select>
                   {!isBug && (
                     <Select value={type} onValueChange={(v) => typeof v === 'string' && setType(v as LeafType)}>
-                      <SelectTrigger aria-label="Type" className="w-28"><SelectValue>{type}</SelectValue></SelectTrigger>
-                      <SelectPopup>{['story', 'spike', 'bug'].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectPopup>
+                      <SelectTrigger aria-label="Type" className="w-28"><SelectValue>{TYPE_LABELS[type].label}</SelectValue></SelectTrigger>
+                      <SelectPopup>{(['story', 'spike', 'bug'] as const).map((t) => <SelectItem key={t} value={t}>{TYPE_LABELS[t].label}</SelectItem>)}</SelectPopup>
                     </Select>
                   )}
                 </div>
@@ -96,8 +96,8 @@ export function NewTicketDialog() {
                     <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
                       <Input placeholder="Waits on, e.g. 1, 2.3, epic-cart" value={after} onChange={(e) => setAfter(e.target.value)} />
                       <Select value={risk} onValueChange={(v) => typeof v === 'string' && setRisk(v as Risk)}>
-                        <SelectTrigger aria-label="Risk" className="w-28"><SelectValue>{risk} risk</SelectValue></SelectTrigger>
-                        <SelectPopup>{['low', 'medium', 'high'].map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectPopup>
+                        <SelectTrigger aria-label="Risk" className="w-32"><SelectValue>{RISK_LABELS[risk].label}</SelectValue></SelectTrigger>
+                        <SelectPopup>{(['low', 'medium', 'high'] as const).map((r) => <SelectItem key={r} value={r}>{RISK_LABELS[r].label}</SelectItem>)}</SelectPopup>
                       </Select>
                       <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={hitl} onChange={(e) => setHitl(e.target.checked)} />Needs a person</label>
                     </div>

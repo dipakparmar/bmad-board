@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { lastWorkingDay, standup, standupNotes, type StandupCommit } from './standup';
+import { lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesPath, type StandupCommit } from './standup';
 import type { Leaf } from './ticket-tree';
 import type { LeafStatus } from './status';
 import { boardState } from './status';
@@ -64,5 +64,14 @@ describe('stand-up', () => {
     const notes = standupNotes(s, (t) => t.ref);
     expect(notes).toContain('### Dipak');
     expect(notes).toContain('- **Doing:** 1.1 Story 1');
+  });
+
+  test('notes round-trip through the saved markdown', () => {
+    const s = standup([ticket(1, 'in-progress', 'Dipak'), ticket(2, 'in-progress', 'dev-agent')], [], new Date(2026, 10, 5));
+    const notes = { members: { dipak: 'Pair with Priya on 1.3.\nAsk finance about regions.', 'dev-agent': 'Rerun with the new fixtures' }, team: 'Demo on Friday.' };
+    const md = standupNotes(s, (t) => t.ref, notes);
+    expect(md).toContain('- **Notes:** Pair with Priya on 1.3.\n  Ask finance about regions.');
+    expect(parseStandupNotes(md, s.members)).toEqual(notes);
+    expect(standupNotesPath('_bmad-output/', new Date(2026, 10, 9))).toBe('_bmad-output/standups/standup-2026-11-09.md');
   });
 });

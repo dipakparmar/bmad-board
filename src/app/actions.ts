@@ -1,4 +1,5 @@
 /** Board actions with user feedback: every write ends in a toast that names the commit or the PR. */
+import { statusLabel } from '@/domain';
 import { toast } from 'sonner';
 import type { LeafStatus, TicketChange } from '../domain';
 import type { BoardState } from './board-context';
@@ -20,5 +21,5 @@ export async function applyWithToast(state: BoardState, workspaceId: string, cha
 
 export function setStatus(state: BoardState, ticket: Ticket, status: LeafStatus) {
   if (ticket.readOnly || status === ticket.leaf.status) return Promise.resolve(false);
-  return applyWithToast(state, ticket.workspaceId, [{ kind: 'mark', key: ticket.leaf.key, status }], `${ticket.ref} is now ${status}`);
+  return applyWithToast(state, ticket.workspaceId, [{ kind: 'mark', key: ticket.leaf.key, status }], `${ticket.ref} is now ${statusLabel(status).toLowerCase()}`);
 }
