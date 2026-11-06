@@ -32,7 +32,7 @@ export function whatsNext(leaves: Leaf[], doneContainers: Iterable<string> = [])
       view.inProgress.push(leaf);
     } else if (waitingOn.length > 0) {
       view.blocked.push({ leaf, waitingOn });
-    } else if (leaf.entry?.refine && !leaf.file?.refined) {
+    } else if (needsRefining(leaf)) {
       view.readyToRefine.push(leaf);
     } else if (leaf.entry?.unknown) {
       view.blocked.push({ leaf, waitingOn: [], reason: leaf.entry.unknown });
@@ -41,4 +41,9 @@ export function whatsNext(leaves: Leaf[], doneContainers: Iterable<string> = [])
     }
   }
   return view;
+}
+
+/** Bugs, leaves with no breakdown entry, and entries marked `refine` get full criteria before a build. */
+export function needsRefining(leaf: Leaf): boolean {
+  return (leaf.type === 'bug' || !leaf.entry || !!leaf.entry.refine) && !leaf.file?.refined;
 }

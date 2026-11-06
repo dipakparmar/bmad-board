@@ -1,0 +1,16 @@
+# The epics in build order.
+
+[[epic]]
+id = 1
+slug = "epic-pricing-rules"
+title = "Pricing rules"
+description = "Every price a shopper sees comes from one pricing function, deployed."
+covers = ["R1", "R2"]
+
+[[epic]]
+id = 2
+slug = "epic-cart-rules"
+title = "Shoppers manage their cart"
+description = "A shopper adds, changes and removes items on the deployed site and the total follows."
+covers = ["R3"]
+after = [{ epic = 1, needs = "the one-function pricing contract" }]

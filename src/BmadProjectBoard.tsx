@@ -1,22 +1,13 @@
-import { ArrowDownUp, ArrowUpRight, ChevronDown, CircleDot, FileText, FolderOpen, LayoutGrid, List, Search, Settings2, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, CircleDot, FileText, FolderOpen, GitBranch, Github, LayoutGrid, List, RefreshCw, Search, Server, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { BoardState, LeafStatus } from './domain';
+import { LEAF_STATUSES, statusForDrop } from './domain';
+import { BrowserFolderSource, GitHubSource, parseRepo } from './store';
+import { loadAuthor, saveAuthor, useBoard } from './app/use-board';
+import { bodyOf, COLUMNS, summaryOf, ticketsOf, type Ticket } from './app/view-model';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
-type Ticket = {
-  id: string;
-  title: string;
-  status: string;
-  sprint?: string;
-  owner?: string;
-  milestone?: string;
-  path?: string;
-  summary?: string;
-  content?: string;
-  kind: 'story' | 'epic';
-  worktree?: string;
-  sourceKey?: string;
-};
 
 type LocalButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size'> & {
   variant?: 'primary' | 'secondary' | 'ghost';
@@ -39,193 +30,148 @@ function Tag({ intent = 'neutral', children }: { intent?: 'info' | 'neutral'; ch
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${className}`}>{children}</span>;
 }
 
-type LocalFileHandle = { kind: 'file'; getFile(): Promise<File> };
-type LocalDirectoryHandle = {
-  kind: 'directory';
-  name: string;
-  getDirectoryHandle(name: string): Promise<LocalDirectoryHandle>;
-  getFileHandle(name: string): Promise<LocalFileHandle>;
-  entries(): AsyncIterableIterator<[string, LocalFileHandle | LocalDirectoryHandle]>;
-};
-type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: (options: { mode: 'read' }) => Promise<LocalDirectoryHandle>;
-};
-type WorkspaceFile = { name: string; path: string; text: string };
+const TOKEN_KEY = 'bmad-board:github-token';
 
-const columns = [
-  { id: 'backlog', label: 'Backlog', color: 'bg-neutral-300' },
-  { id: 'ready-for-dev', label: 'Ready', color: 'bg-blue-500' },
-  { id: 'in-progress', label: 'In progress', color: 'bg-violet-500' },
-  { id: 'review', label: 'Review', color: 'bg-amber-500' },
-  { id: 'done', label: 'Done', color: 'bg-emerald-500' },
-];
-
-function statusFrom(value: string) {
-  const normalized = value.toLowerCase().replaceAll('_', '-').trim();
-  if (['done', 'complete', 'completed'].includes(normalized)) return 'done';
-  if (['in-progress', 'in progress', 'implementing'].includes(normalized)) return 'in-progress';
-  if (['review', 'qa', 'compliance', 'blocked'].includes(normalized)) return 'review';
-  if (['ready-for-dev', 'ready', 'ready for dev'].includes(normalized)) return 'ready-for-dev';
-  return 'backlog';
-}
-
-function titleFromSlug(slug: string) {
-  return slug.replace(/^\d+-\d+-/, '').replaceAll('-', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-async function loadWorkspace(root: LocalDirectoryHandle): Promise<Ticket[]> {
-  const output = await root.getDirectoryHandle('_bmad-output');
-  const implementation = await output.getDirectoryHandle('implementation-artifacts');
-  const planning = await output.getDirectoryHandle('planning-artifacts');
-  const statusFile = await (await implementation.getFileHandle('sprint-status.yaml')).getFile();
-  const source = await statusFile.text();
-  const statusSection = source.split(/^development_status:\s*$/m)[1] ?? source;
-  const entries = [...statusSection.matchAll(/^  ([\w.-]+):(?:\s*(.*))?\s*$/gm)];
-  const tickets: Ticket[] = [];
-  const storyKeys = new Set(entries.map((entry) => entry[1]).filter((key): key is string => typeof key === 'string' && /^\d+-\d+-.+/.test(key)));
-  const storyFiles = new Map<string, WorkspaceFile>();
-  for await (const [name, handle] of implementation.entries()) {
-    if (handle.kind !== 'file' || !storyKeys.has(name.replace(/\.md$/i, ''))) continue;
-    const match = name.match(/^(\d+)-(\d+)-(.+)\.md$/i);
-    if (!match) continue;
-    const id = `${match[1]}.${match[2]}`;
-    const file = await handle.getFile();
-    storyFiles.set(id, { name, path: `${root.name}/_bmad-output/implementation-artifacts/${name}`, text: await file.text() });
+function readToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) ?? '';
+  } catch {
+    return '';
   }
-  const epicText = await (await (await planning.getFileHandle('epics.md')).getFile()).text();
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
-    if (!entry) continue;
-    const key = entry[1];
-    const scalarStatus = entry[2]?.trim();
-    if (!key || key === 'development_status') continue;
-    if (/^epic-\d+$/i.test(key)) {
-      const id = `Epic ${key.replace(/^epic-/i, '')}`;
-      const epicNumber = key.replace(/^epic-/i, '');
-      const heading = epicText.match(new RegExp(`^## Epic ${epicNumber}[:：]\\s*(.+)$`, 'mi'))?.[1];
-      tickets.push({ id, title: heading ?? id, status: statusFrom(scalarStatus ?? 'backlog'), kind: 'epic', path: `${root.name}/_bmad-output/planning-artifacts/epics.md`, sourceKey: key });
-      continue;
-    }
-    const storyMatch = key.match(/^(\d+)-(\d+)-(.+)$/);
-    if (!storyMatch) continue;
-    const id = `${storyMatch[1]}.${storyMatch[2]}`;
-    const end = entries[index + 1]?.index ?? statusSection.length;
-    const block = statusSection.slice(entry.index, end);
-    const getValue = (field: string) => block.match(new RegExp(`^    ${field}:\\s*([^\\n#]+)`, 'm'))?.[1]?.trim().replace(/^['"]|['"]$/g, '');
-    const story = storyFiles.get(id);
-    const storyHeading = story?.text.match(/^#\s+(.+)$/m)?.[1]?.replace(/^Story\s+[\d.]+[:：-]?\s*/i, '').trim();
-    const body = story?.text.replace(/^---[\s\S]*?---\s*/m, '').replace(/^#+\s+.*$/gm, '').replace(/\[[^\]]+\]\([^)]+\)/g, '').replace(/[`*_>#|]/g, '').replace(/\s+/g, ' ').trim();
-    const content = story?.text.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n?/, '').replace(/^#\s+.+(?:\r?\n)+/, '');
-    tickets.push({
-      id,
-      title: storyHeading || getValue('title') || titleFromSlug(storyMatch[3] ?? key),
-      status: statusFrom(getValue('status') ?? scalarStatus ?? 'backlog'),
-      sprint: getValue('sprint'),
-      owner: getValue('owner'),
-      milestone: getValue('milestone'),
-      path: story?.path ?? `${root.name}/_bmad-output/implementation-artifacts/sprint-status.yaml`,
-      summary: (body || getValue('note'))?.slice(0, 190),
-      content,
-      kind: 'story',
-      sourceKey: key,
-    });
-  }
-  return tickets;
 }
 
 export function BmadProjectBoardPreview() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [sourceLabel, setSourceLabel] = useState('No worktree loaded');
-  const [worktreeFilter, setWorktreeFilter] = useState('All worktrees');
-  const [selected, setSelected] = useState<Ticket | null>(null);
+  const board = useBoard();
+  const [workspaceFilter, setWorkspaceFilter] = useState('all');
+  const [epicFilter, setEpicFilter] = useState('all');
+  const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [sprint, setSprint] = useState('All sprints');
   const [view, setView] = useState<'board' | 'list'>('board');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const sprints = useMemo(() => ['All sprints', ...new Set(tickets.map((ticket) => ticket.sprint).filter((value): value is string => Boolean(value)))], [tickets]);
-  const worktrees = useMemo(() => ['All worktrees', ...new Set(tickets.map((ticket) => ticket.worktree).filter((value): value is string => Boolean(value)))], [tickets]);
-  const visible = tickets.filter((ticket) =>
-    `${ticket.id} ${ticket.title} ${ticket.owner ?? ''} ${ticket.sprint ?? ''} ${ticket.summary ?? ''}`.toLowerCase().includes(search.toLowerCase()) &&
-    (sprint === 'All sprints' || ticket.sprint === sprint) &&
-    (worktreeFilter === 'All worktrees' || ticket.worktree === worktreeFilter),
-  );
-  const counts = columns.map((column) => ({ ...column, count: visible.filter((ticket) => ticket.status === column.id).length }));
+  const [connecting, setConnecting] = useState<'github' | null>(null);
 
-  async function openWorktree() {
-    const pickDirectory = (window as DirectoryPickerWindow).showDirectoryPicker;
-    if (!pickDirectory) {
-      setError('This browser does not support local folder access. Open this preview in Chrome or Edge.');
+  const tickets = useMemo(() => board.workspaces.flatMap((w) => (w.tree ? ticketsOf(w.store.id, w.store.label, w.tree, w.store.capabilities.write) : [])), [board.workspaces]);
+  const epics = useMemo(() => [...new Map(tickets.filter((t) => t.epic).map((t) => [t.epic?.slug ?? '', t.epic?.title ?? ''])).entries()], [tickets]);
+  const visible = tickets.filter((t) =>
+    t.leaf.state !== 'dropped' &&
+    `${t.ref} ${t.leaf.title} ${t.leaf.plan?.assignee ?? ''} ${t.epic?.title ?? ''} ${summaryOf(t.leaf)}`.toLowerCase().includes(search.toLowerCase()) &&
+    (workspaceFilter === 'all' || t.workspaceId === workspaceFilter) &&
+    (epicFilter === 'all' || t.epic?.slug === epicFilter || (epicFilter === 'backlog' && t.leaf.folder === 'backlog')),
+  );
+  const selected = tickets.find((t) => t.uid === selectedUid) ?? null;
+  const problems = board.workspaces.flatMap((w) => [...(w.error ? [`${w.store.label}: ${w.error}`] : []), ...(w.tree?.problems ?? []).map((p) => `${w.store.label}: ${p}`)]);
+  const loading = board.workspaces.some((w) => w.loading);
+  const v6 = board.workspaces.some((w) => w.tree?.layout === 'v6');
+
+  async function openFolder() {
+    if (!BrowserFolderSource.supported()) {
+      setError('This browser cannot open local folders. Use Chrome or Edge, or run `bun run server` to edit with git.');
       return;
     }
-    setLoading(true);
-    setError('');
     try {
-      const root = await pickDirectory.call(window, { mode: 'read' });
-      const imported = await loadWorkspace(root);
-      setTickets((previous) => [...previous.filter((ticket) => ticket.worktree !== root.name), ...imported.map((ticket) => ({ ...ticket, worktree: root.name }))]);
-      setSourceLabel('Worktrees');
-      setWorktreeFilter(root.name);
-      setSelected(null);
+      await board.add(await BrowserFolderSource.pick());
     } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
-        setError(cause instanceof Error ? `Could not read this worktree: ${cause.message}` : 'Could not read this worktree.');
-      }
-    } finally {
-      setLoading(false);
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : 'Could not open that folder.');
     }
+  }
+
+  async function connectGitHub(repoText: string, token: string) {
+    const target = parseRepo(repoText);
+    if (!target) {
+      setError('Enter a repo as owner/name or a github.com URL.');
+      return;
+    }
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+    } catch {
+      /* ignore */
+    }
+    setConnecting(null);
+    await board.add(new GitHubSource({ ...target, token: token || undefined }));
+  }
+
+  async function move(ticket: Ticket, status: LeafStatus) {
+    if (ticket.readOnly) return;
+    await board.apply(ticket.workspaceId, [{ kind: 'mark', key: ticket.leaf.key, status }]);
   }
 
   return (
     <div className="bmad-board min-h-screen bg-[#f7f8fa] text-[#20212a]">
       <header className="flex h-14 items-center justify-between border-b border-[#e6e7eb] bg-white px-6">
-        <div className="flex items-center gap-3 text-sm"><div className="grid size-7 place-items-center rounded-lg bg-[#5046e5] text-white"><LayoutGrid size={15} /></div><span className="font-semibold">Demo Project</span><span className="text-[#a0a1aa]">/</span><span className="text-[#676975]">BMAD workspace</span></div>
-        <div className="flex items-center gap-3"><span className="hidden text-xs text-[#747682] sm:block"><FolderOpen className="mr-1 inline" size={14} />{sourceLabel}</span><Button variant="secondary" size="sm" leadingIcon={FolderOpen} onClick={() => void openWorktree()}>{loading ? 'Reading locally…' : 'Open local worktree'}</Button></div>
+        <div className="flex items-center gap-3 text-sm"><div className="grid size-7 place-items-center rounded-lg bg-[#5046e5] text-white"><LayoutGrid size={15} /></div><span className="font-semibold">BMAD board</span><span className="text-[#a0a1aa]">/</span><span className="text-[#676975]">{board.workspaces.map((w) => w.store.label).join(', ') || 'No project'}</span></div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" leadingIcon={RefreshCw} onClick={() => board.workspaces.forEach((w) => void board.reload(w.store))}>{loading ? 'Loading…' : 'Reload'}</Button>
+          <Button variant="secondary" size="sm" leadingIcon={Github} onClick={() => setConnecting('github')}>GitHub repo</Button>
+          <Button variant="secondary" size="sm" leadingIcon={FolderOpen} onClick={() => void openFolder()}>Open folder</Button>
+        </div>
       </header>
       <div className="mx-auto max-w-[1500px] px-7 py-7">
         <div className="mb-7 flex flex-wrap items-start justify-between gap-5">
-          <div><div className="mb-2 flex items-center gap-2 text-xs font-medium text-[#777985]"><span>Workspace</span><ChevronDown size={13} /><span>BMAD delivery</span></div><h1 className="text-[28px] font-semibold tracking-[-0.04em]">Sprint board <span className="ml-2 align-middle text-sm font-medium tracking-normal text-[#898b96]">{visible.length} issues</span></h1><p className="mt-1 text-sm text-[#777985]">Markdown and sprint status, in one place.</p></div>
-          <div className="flex items-center gap-2"><Button variant="secondary" size="sm" leadingIcon={SlidersHorizontal}>Filter</Button><Button variant="secondary" size="sm" leadingIcon={ArrowDownUp}>Sort</Button><Button variant="primary" size="sm" leadingIcon={FolderOpen} onClick={() => void openWorktree()}>Add local worktree</Button></div>
+          <div><div className="mb-2 flex items-center gap-2 text-xs font-medium text-[#777985]"><span>Ticket tree</span><ChevronDown size={13} /><span>{board.workspaces[0]?.tree?.activeInitiative ?? 'all initiatives'}</span></div><h1 className="text-[28px] font-semibold tracking-[-0.04em]">Board <span className="ml-2 align-middle text-sm font-medium tracking-normal text-[#898b96]">{visible.length} tickets</span></h1><p className="mt-1 text-sm text-[#777985]">BMAD tickets, read from and written back to git.</p></div>
+          <div className="flex flex-wrap gap-2">{board.workspaces.map((w) => <span key={w.store.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#e3e4e9] bg-white px-2.5 py-1.5 text-xs text-[#5c5e69]">{w.store.id.startsWith('local:') ? <Server size={13} /> : w.store.id.startsWith('github:') ? <Github size={13} /> : <FolderOpen size={13} />}{w.store.label}<span className="text-[#9a9ba4]">{w.store.capabilities.write ? (w.store.capabilities.pullRequests ? 'PR' : 'commits') : 'read-only'}</span><button aria-label={`Disconnect ${w.store.label}`} onClick={() => board.remove(w.store.id)}><X size={12} /></button></span>)}</div>
         </div>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e6ea] pb-4">
           <div className="flex items-center gap-1 rounded-lg bg-[#eeeff2] p-1 text-sm"><button className={`rounded-md px-3 py-1.5 ${view === 'board' ? 'bg-white font-medium shadow-sm' : 'text-[#747682]'}`} onClick={() => setView('board')}><LayoutGrid className="mr-1.5 inline" size={14} />Board</button><button className={`rounded-md px-3 py-1.5 ${view === 'list' ? 'bg-white font-medium shadow-sm' : 'text-[#747682]'}`} onClick={() => setView('list')}><List className="mr-1.5 inline" size={14} />List</button></div>
-          <div className="flex flex-wrap items-center gap-2"><label className="flex h-9 items-center gap-2 rounded-md border border-[#e3e4e9] bg-white px-3 text-sm"><Search size={14} className="text-[#92939c]" /><input className="w-40 outline-none placeholder:text-[#a1a2aa]" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search issues" /></label><select aria-label="Filter by worktree" className="h-9 rounded-md border border-[#e3e4e9] bg-white px-3 text-sm" value={worktreeFilter} onChange={(event) => setWorktreeFilter(event.target.value)}>{worktrees.map((item) => <option key={item}>{item}</option>)}</select><select aria-label="Filter by sprint" className="h-9 rounded-md border border-[#e3e4e9] bg-white px-3 text-sm" value={sprint} onChange={(event) => setSprint(event.target.value)}>{sprints.map((item) => <option key={item}>{item}</option>)}</select><Button variant="ghost" size="sm" aria-label="Board settings"><Settings2 size={16} /></Button></div>
+          <div className="flex flex-wrap items-center gap-2"><label className="flex h-9 items-center gap-2 rounded-md border border-[#e3e4e9] bg-white px-3 text-sm"><Search size={14} className="text-[#92939c]" /><input className="w-40 outline-none placeholder:text-[#a1a2aa]" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tickets" /></label>
+            <select aria-label="Filter by project" className="h-9 rounded-md border border-[#e3e4e9] bg-white px-3 text-sm" value={workspaceFilter} onChange={(e) => setWorkspaceFilter(e.target.value)}><option value="all">All projects</option>{board.workspaces.map((w) => <option key={w.store.id} value={w.store.id}>{w.store.label}</option>)}</select>
+            <select aria-label="Filter by epic" className="h-9 rounded-md border border-[#e3e4e9] bg-white px-3 text-sm" value={epicFilter} onChange={(e) => setEpicFilter(e.target.value)}><option value="all">All epics</option>{epics.map(([slug, title]) => <option key={slug} value={slug}>{title}</option>)}<option value="backlog">Backlog</option></select>
+          </div>
         </div>
         {error && <div role="alert" className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}<button onClick={() => setError('')} aria-label="Dismiss"><X size={16} /></button></div>}
-        {tickets.length === 0 ? (
+        {v6 && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">This project uses the BMAD v6 layout, so it is read-only here. Run <code>bmad migrate method</code> to move it to the ticket tree and edit it on the board.</div>}
+        {problems.length > 0 && <details className="mb-4 rounded-lg border border-[#e5e6ea] bg-white px-4 py-3 text-sm text-[#5c5e69]"><summary className="cursor-pointer font-medium">{problems.length} issue{problems.length === 1 ? '' : 's'} reading the tree</summary><ul className="mt-2 list-disc space-y-1 pl-5 text-xs">{problems.map((p) => <li key={p}>{p}</li>)}</ul></details>}
+        {board.workspaces.flatMap((w) => (w.lastResult?.pullRequestUrl ? [w.lastResult.pullRequestUrl] : [])).map((url) => <div key={url} className="mb-4 rounded-lg border border-[#d9d6fd] bg-[#f5f4ff] px-4 py-3 text-sm text-[#3d36b0]"><GitBranch className="mr-1.5 inline" size={14} />Your changes are on a pull request: <a className="underline" href={url} target="_blank" rel="noreferrer">{url}</a></div>)}
+        {board.workspaces.length === 0 ? (
           <section className="mx-auto mt-14 max-w-xl rounded-2xl border border-[#e5e6ea] bg-white px-8 py-10 text-center shadow-sm">
             <div className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-[#eeedff] text-[#5046e5]"><FolderOpen size={22} /></div>
-            <h2 className="text-lg font-semibold">Open a local worktree</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#777985]">The board reads sprint status, epic planning, and story Markdown directly from the folder you choose. Files stay on this computer and are never uploaded or changed.</p>
-            <Button className="mt-5" variant="primary" size="sm" leadingIcon={FolderOpen} onClick={() => void openWorktree()}>{loading ? 'Reading locally…' : 'Choose local worktree'}</Button>
+            <h2 className="text-lg font-semibold">Connect a BMAD project</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#777985]">Run <code>bun run server -- --root &lt;project&gt;</code> to edit a local checkout with git commits, connect a GitHub repo to edit through pull requests, or open a folder to browse it read-only.</p>
+            <div className="mt-5 flex justify-center gap-2"><Button variant="primary" size="sm" leadingIcon={Github} onClick={() => setConnecting('github')}>Connect GitHub repo</Button><Button variant="secondary" size="sm" leadingIcon={FolderOpen} onClick={() => void openFolder()}>Open folder</Button></div>
           </section>
         ) : <>
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><Metric label="Total issues" value={visible.length} /><Metric label="In progress" value={visible.filter((ticket) => ticket.status === 'in-progress').length} tint="violet" /><Metric label="Needs attention" value={visible.filter((ticket) => ['review', 'qa', 'compliance'].includes(ticket.status)).length} tint="amber" /><Metric label="Completed" value={visible.filter((ticket) => ticket.status === 'done').length} tint="green" /></div>
-        {view === 'board' ? (
-          <div className="grid min-w-[1050px] grid-cols-5 gap-3 overflow-x-auto">
-            {counts.map((column) => {
-              const columnTickets = visible.filter((ticket) => ticket.status === column.id);
-              return <section key={column.id} className="min-h-[430px] rounded-xl bg-[#eff0f3] p-2.5">
-                <div className="mb-2 flex items-center justify-between px-1 py-1"><div className="flex items-center gap-2 text-[13px] font-semibold"><span className={`size-2 rounded-full ${column.color}`} />{column.label}<span className="rounded bg-white/80 px-1.5 py-0.5 text-[11px] text-[#7a7c86]">{column.count}</span></div><button aria-label={`More ${column.label} options`} className="text-[#858792]">···</button></div>
-                <div className="space-y-2">{columnTickets.slice(0, 15).map((ticket) => <TicketCard key={`${ticket.worktree ?? ''}:${ticket.sourceKey ?? ticket.id}`} ticket={ticket} onClick={() => setSelected(ticket)} />)}{column.count > 15 && <div className="px-2 py-2 text-center text-xs text-[#858792]">+ {column.count - 15} more issues</div>}{!column.count && <div className="rounded-lg border border-dashed border-[#d5d7dd] px-3 py-5 text-center text-xs text-[#9a9ba4]">Nothing here yet</div>}</div>
-              </section>;
-            })}
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-[#e5e6ea] bg-white"><div className="grid grid-cols-[110px_1fr_140px_150px_120px] border-b border-[#ececf0] px-4 py-2 text-xs font-medium text-[#838590]"><span>ID</span><span>Issue</span><span>Status</span><span>Sprint</span><span>Owner</span></div>{visible.slice(0, 300).map((ticket) => <button key={`${ticket.worktree ?? ''}:${ticket.sourceKey ?? ticket.id}`} onClick={() => setSelected(ticket)} className="grid w-full grid-cols-[110px_1fr_140px_150px_120px] items-center border-b border-[#f0f0f3] px-4 py-3 text-left text-sm last:border-0 hover:bg-[#fafaff]"><span className="font-mono text-xs text-[#81838e]">{ticket.id}</span><span className="font-medium">{ticket.title}</span><span><StatusChip status={ticket.status} /></span><span className="text-[#777985]">{ticket.sprint ?? 'No sprint'}</span><span className="text-[#777985]">{ticket.owner ?? 'Unassigned'}</span></button>)}{visible.length > 300 && <p className="px-4 py-3 text-xs text-[#858792]">Showing first 300 issues. Use search or filters to narrow the list.</p>}</div>
-        )}
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><Metric label="Open tickets" value={visible.filter((t) => t.leaf.state !== 'done').length} /><Metric label="In progress" value={visible.filter((t) => t.leaf.state === 'in-progress').length} tint="violet" /><Metric label="In review" value={visible.filter((t) => t.leaf.state === 'review').length} tint="amber" /><Metric label="Done" value={visible.filter((t) => t.leaf.state === 'done').length} tint="green" /></div>
+          {view === 'board' ? (
+            <div className="grid min-w-[900px] grid-cols-4 gap-3 overflow-x-auto">
+              {COLUMNS.map((column) => {
+                const columnTickets = visible.filter((t) => t.leaf.state === column.id);
+                return <section key={column.id} className="min-h-[430px] rounded-xl bg-[#eff0f3] p-2.5" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { const t = tickets.find((x) => x.uid === e.dataTransfer.getData('text/plain')); const status = t && statusForDrop(column.id, t.leaf.status); if (t && status) void move(t, status); }}>
+                  <div className="mb-2 flex items-center justify-between px-1 py-1"><div className="flex items-center gap-2 text-[13px] font-semibold"><span className={`size-2 rounded-full ${column.color}`} />{column.label}<span className="rounded bg-white/80 px-1.5 py-0.5 text-[11px] text-[#7a7c86]">{columnTickets.length}</span></div></div>
+                  <div className="space-y-2">{columnTickets.map((t) => <TicketCard key={t.uid} ticket={t} onClick={() => setSelectedUid(t.uid)} />)}{!columnTickets.length && <div className="rounded-lg border border-dashed border-[#d5d7dd] px-3 py-5 text-center text-xs text-[#9a9ba4]">Nothing here yet</div>}</div>
+                </section>;
+              })}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-[#e5e6ea] bg-white"><div className="grid grid-cols-[90px_1fr_140px_200px_120px] border-b border-[#ececf0] px-4 py-2 text-xs font-medium text-[#838590]"><span>Ref</span><span>Ticket</span><span>Status</span><span>Epic</span><span>Assignee</span></div>{visible.map((t) => <button key={t.uid} onClick={() => setSelectedUid(t.uid)} className="grid w-full grid-cols-[90px_1fr_140px_200px_120px] items-center border-b border-[#f0f0f3] px-4 py-3 text-left text-sm last:border-0 hover:bg-[#fafaff]"><span className="font-mono text-xs text-[#81838e]">{t.ref}</span><span className="font-medium">{t.leaf.title}</span><span><StatusChip state={t.leaf.state} status={t.leaf.status} /></span><span className="truncate text-[#777985]">{t.epic?.title ?? 'Backlog'}</span><span className="text-[#777985]">{t.leaf.plan?.assignee ?? 'Unassigned'}</span></button>)}</div>
+          )}
         </>}
       </div>
-      {selected && <div className="fixed inset-0 z-20 flex justify-end bg-black/25" onClick={() => setSelected(null)}><aside className="h-full w-full max-w-[760px] overflow-y-auto bg-white p-7 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className="mb-7 flex items-center justify-between"><span className="font-mono text-xs text-[#858792]">{selected.id}</span><button onClick={() => setSelected(null)} aria-label="Close issue details"><X size={19} /></button></div>
-        <div className="mb-3"><StatusChip status={selected.status} /></div><h2 className="text-2xl font-semibold leading-8">{selected.title}</h2>
-        <div className="my-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Sprint', selected.sprint], ['Owner', selected.owner], ['Milestone', selected.milestone], ['Type', selected.kind]].map(([label, value]) => <div key={label} className="rounded-lg border border-[#ececf0] p-3"><div className="mb-1 text-[11px] uppercase tracking-wide text-[#8a8c96]">{label}</div><div className="text-sm font-medium">{value || 'Not set'}</div></div>)}</div>
-        <section className="border-t border-[#ececf0] pt-5"><h3 className="mb-4 text-sm font-semibold">Story details</h3>{selected.content ? <MarkdownBody source={selected.content} /> : <p className="text-sm leading-6 text-[#646672]">{selected.summary || 'No matching story Markdown was found for this ticket.'}</p>}</section>
-        <div className="mt-7 border-t border-[#ececf0] pt-5"><div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#858792]">Source file</div><div className="flex items-start gap-2 rounded-lg bg-[#f7f8fa] p-3 text-xs leading-5 text-[#646672]"><FileText size={15} className="mt-0.5 shrink-0" />{selected.path ?? 'Derived from sprint-status.yaml'} <ArrowUpRight size={13} className="ml-auto shrink-0" /></div></div>
-        <p className="mt-5 text-xs text-[#92939c]">Read-only view of the selected worktree. Source files are never modified.</p>
+      {connecting === 'github' && <GitHubDialog onCancel={() => setConnecting(null)} onConnect={(repo, token) => void connectGitHub(repo, token)} />}
+      {selected && <div className="fixed inset-0 z-20 flex justify-end bg-black/25" onClick={() => setSelectedUid(null)}><aside className="h-full w-full max-w-[760px] overflow-y-auto bg-white p-7 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="mb-7 flex items-center justify-between"><span className="font-mono text-xs text-[#858792]">{selected.ref} · {selected.workspace}</span><button onClick={() => setSelectedUid(null)} aria-label="Close ticket details"><X size={19} /></button></div>
+        <div className="mb-3 flex items-center gap-2"><StatusChip state={selected.leaf.state} status={selected.leaf.status} />{!selected.readOnly && <select aria-label="Set status" className="h-8 rounded-md border border-[#e3e4e9] bg-white px-2 text-xs" value={selected.leaf.status || ''} onChange={(e) => void move(selected, e.target.value as LeafStatus)}><option value="" disabled>planned</option>{LEAF_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>}</div>
+        <h2 className="text-2xl font-semibold leading-8">{selected.leaf.title}</h2>
+        <div className="my-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Epic', selected.epic?.title ?? 'Backlog'], ['Assignee', selected.leaf.plan?.assignee], ['Type', selected.leaf.type], ['Risk', selected.leaf.risk], ['Needs a person', selected.leaf.hitl ? 'yes' : 'no'], ['Waits on', selected.leaf.after.join(', ')], ['Blocked', selected.leaf.plan?.blockedReason], ['Covers', selected.leaf.entry?.covers.join(', ')]].map(([label, value]) => <div key={label} className="rounded-lg border border-[#ececf0] p-3"><div className="mb-1 text-[11px] uppercase tracking-wide text-[#8a8c96]">{label}</div><div className="text-sm font-medium">{value || 'Not set'}</div></div>)}</div>
+        <section className="border-t border-[#ececf0] pt-5"><h3 className="mb-4 text-sm font-semibold">Ticket</h3>{bodyOf(selected.leaf) ? <MarkdownBody source={bodyOf(selected.leaf)} /> : <p className="text-sm text-[#646672]">No description yet.</p>}</section>
+        {selected.leaf.plan?.body.trim() && <section className="mt-6 border-t border-[#ececf0] pt-5"><h3 className="mb-4 text-sm font-semibold">Build plan</h3><MarkdownBody source={selected.leaf.plan.body} /></section>}
+        <div className="mt-7 border-t border-[#ececf0] pt-5"><div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#858792]">Files</div>{[selected.leaf.file?.path, selected.leaf.plan?.path, `${selected.leaf.dir}/tickets.toml`].filter(Boolean).map((p) => <div key={p} className="mb-1 flex items-start gap-2 rounded-lg bg-[#f7f8fa] p-3 text-xs leading-5 text-[#646672]"><FileText size={15} className="mt-0.5 shrink-0" />{p}<ArrowUpRight size={13} className="ml-auto shrink-0" /></div>)}</div>
+        <p className="mt-5 text-xs text-[#92939c]">{selected.readOnly ? 'Read-only here.' : `Each change is one git commit, recorded as made by ${loadAuthor().name}.`}</p>
       </aside></div>}
     </div>
   );
+}
+
+function GitHubDialog({ onCancel, onConnect }: { onCancel: () => void; onConnect: (repo: string, token: string) => void }) {
+  const [repo, setRepo] = useState('');
+  const [token, setToken] = useState(readToken);
+  const [name, setName] = useState(loadAuthor().name === 'board user' ? '' : loadAuthor().name);
+  return <div className="fixed inset-0 z-30 grid place-items-center bg-black/30 p-4" onClick={onCancel}><form className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (name) saveAuthor(name); onConnect(repo, token); }}>
+    <h2 className="text-base font-semibold">Connect a GitHub repo</h2>
+    <p className="mt-1 text-xs leading-5 text-[#777985]">Without a token the board is read-only (public repos only). With a fine-grained token that has Contents and Pull requests write access, edits go to a <code>bmad-board/…</code> branch and one pull request. The token stays in this browser.</p>
+    <label className="mt-4 block text-xs font-medium">Repo<input required autoFocus className="mt-1 h-9 w-full rounded-md border border-[#e3e4e9] px-3 text-sm" placeholder="owner/name or github.com URL" value={repo} onChange={(e) => setRepo(e.target.value)} /></label>
+    <label className="mt-3 block text-xs font-medium">Token (optional)<input type="password" className="mt-1 h-9 w-full rounded-md border border-[#e3e4e9] px-3 text-sm" value={token} onChange={(e) => setToken(e.target.value)} /></label>
+    <label className="mt-3 block text-xs font-medium">Your name, for commit messages<input className="mt-1 h-9 w-full rounded-md border border-[#e3e4e9] px-3 text-sm" value={name} onChange={(e) => setName(e.target.value)} /></label>
+    <div className="mt-5 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" variant="primary">Connect</Button></div>
+  </form></div>;
 }
 
 function Metric({ label, value, tint = 'default' }: { label: string; value: number; tint?: string }) {
@@ -270,11 +216,13 @@ function InlineMarkdown({ text }: { text: string }) {
   })}</>;
 }
 
+
 function TicketCard({ ticket, onClick }: { ticket: Ticket; onClick: () => void }) {
-  return <button onClick={onClick} className="w-full rounded-lg border border-[#e4e5e9] bg-white p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,.03)] transition hover:border-[#c9c6fb] hover:shadow-sm"><div className="mb-2 flex items-center justify-between"><span className="font-mono text-[11px] text-[#858792]">{ticket.id}</span>{ticket.kind === 'epic' ? <Tag intent="info">Epic</Tag> : <CircleDot size={14} className="text-[#9698a2]" />}</div><div className="text-[13px] font-medium leading-[19px]">{ticket.title}</div>{ticket.summary && <p className="mt-1.5 line-clamp-2 text-xs leading-[17px] text-[#777985]">{ticket.summary}</p>}<div className="mt-3 flex items-center gap-2">{ticket.sprint && <span className="rounded bg-[#f1f1f4] px-1.5 py-1 text-[10px] font-medium text-[#6d6f79]">{ticket.sprint}</span>}{ticket.milestone && <span className="text-[10px] text-[#858792]">{ticket.milestone}</span>}{ticket.owner && <span className="ml-auto grid size-6 place-items-center rounded-full bg-[#e8e7ff] text-[10px] font-semibold text-[#5148cb]">{ticket.owner.slice(0, 2).toUpperCase()}</span>}</div></button>;
+  const { leaf } = ticket;
+  return <button draggable={!ticket.readOnly} onDragStart={(e) => e.dataTransfer.setData('text/plain', ticket.uid)} onClick={onClick} className="w-full rounded-lg border border-[#e4e5e9] bg-white p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,.03)] transition hover:border-[#c9c6fb] hover:shadow-sm"><div className="mb-2 flex items-center justify-between"><span className="font-mono text-[11px] text-[#858792]">{ticket.ref}</span>{leaf.type !== 'story' ? <Tag intent="info">{leaf.type}</Tag> : <CircleDot size={14} className="text-[#9698a2]" />}</div><div className="text-[13px] font-medium leading-[19px]">{leaf.title}</div>{summaryOf(leaf) && <p className="mt-1.5 line-clamp-2 text-xs leading-[17px] text-[#777985]">{summaryOf(leaf)}</p>}<div className="mt-3 flex items-center gap-2">{ticket.epic && <span className="truncate rounded bg-[#f1f1f4] px-1.5 py-1 text-[10px] font-medium text-[#6d6f79]">{ticket.epic.title}</span>}{leaf.hitl && <Tag>needs a person</Tag>}{leaf.plan?.blockedAt && <span className="text-[10px] font-medium text-red-600">blocked</span>}{leaf.plan?.assignee && <span className="ml-auto grid size-6 shrink-0 place-items-center rounded-full bg-[#e8e7ff] text-[10px] font-semibold text-[#5148cb]">{leaf.plan.assignee.slice(0, 2).toUpperCase()}</span>}</div></button>;
 }
 
-function StatusChip({ status }: { status: string }) {
-  const found = columns.find((column) => column.id === status);
-  return <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f2f3f6] px-2 py-1 text-[11px] font-medium text-[#686a75]"><span className={`size-1.5 rounded-full ${found?.color ?? 'bg-amber-500'}`} />{found?.label ?? status.replaceAll('-', ' ')}</span>;
+function StatusChip({ state, status }: { state: BoardState; status: LeafStatus | '' }) {
+  const found = COLUMNS.find((column) => column.id === state);
+  return <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f2f3f6] px-2 py-1 text-[11px] font-medium text-[#686a75]"><span className={`size-1.5 rounded-full ${found?.color ?? 'bg-neutral-400'}`} />{status || 'planned'}</span>;
 }

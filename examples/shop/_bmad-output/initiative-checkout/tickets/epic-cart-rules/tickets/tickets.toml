@@ -1,0 +1,22 @@
+[[entry]]
+id = 1
+type = "story"
+title = "Cart service scaffold"
+description = "Stands up the cart service with one add-item path through UI, API and store."
+verify = "A shopper adds one item on the deployed site and sees it in the cart."
+covers = ["R3"]
+after = []
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Change and remove items"
+description = "Quantity changes and removal update the total."
+verify = "Changing a quantity to 0 removes the item and the total follows."
+covers = ["R3"]
+after = [1, "1.2"]
+hitl = false
+risk = "medium"
+refine = true

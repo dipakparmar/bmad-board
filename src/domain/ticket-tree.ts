@@ -95,6 +95,10 @@ export interface Leaf {
   title: string;
   /** Folder holding it: an epic slug, the initiative slug, or `backlog`. */
   folder: string;
+  /** Path of the folder holding its entry, file and plan, relative to the project root. */
+  dir: string;
+  /** Initiative it belongs to; empty for a backlog leaf. */
+  initiative: string;
   entry?: BreakdownEntry;
   /** Leaf markdown, once refined or published. From then on the file is truth for its body. */
   file?: { path: string; body: string; refined: boolean; severity?: Severity };
@@ -119,10 +123,14 @@ export interface Container {
   id?: number | string;
   title: string;
   description: string;
+  /** The container's own markdown file, relative to the project root. */
   path: string;
   status?: ContainerStatus;
   covers: RequirementId[];
+  /** Declared order prerequisites from the parent's tickets.toml. */
   after: ContainerAfter[];
+  /** Gating prerequisites from the container file's own `after`, resolved to keys. */
+  gates: TicketKey[];
   /** Epic only: false while written thin after slicing. */
   refined?: boolean;
   risk?: Risk;

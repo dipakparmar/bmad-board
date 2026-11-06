@@ -1,0 +1,44 @@
+# Every planned story, in build order.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Pricing function scaffold"
+description = "Stands up the pricing module with one list-price path."
+verify = "The product page shows a price served by the pricing module."
+covers = ["R1"]
+after = []
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Apply and refuse discount codes"
+description = "Adds code validation to the pricing call and shows the refusal reason."
+verify = "A valid code lowers the total; an expired one is refused with its reason."
+covers = ["R2"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "spike"
+title = "Pick a tax provider"
+description = "Compares two tax APIs on our three test baskets."
+covers = ["R1"]
+after = []
+hitl = true
+risk = "medium"
+unknown = "Do we sell outside the US in v1?"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Refactor sweep"
+description = "Cleans up what the epic's stories left behind."
+covers = []
+after = [2, 3]
+hitl = false
+risk = "low"

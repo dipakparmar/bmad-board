@@ -6,8 +6,9 @@ import type { Leaf } from './ticket-tree';
 function leaf(key: string, over: Partial<Leaf> = {}): Leaf {
   const status = over.status ?? '';
   return {
-    key, id: key.split('/')[1] ?? key, type: 'story', title: key, folder: key.split('/')[0] ?? '',
-    after: [], gatedBy: [], hitl: false, status, state: boardState(status), ...over,
+    key, id: key.split('/')[1] ?? key, type: 'story', title: key, folder: key.split('/')[0] ?? '', dir: '', initiative: 'i',
+    after: [], gatedBy: [], hitl: false, status, state: boardState(status),
+    entry: { id: key, type: 'story', title: key, description: '', covers: [], after: [], hitl: false }, ...over,
   };
 }
 

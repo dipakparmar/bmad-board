@@ -79,8 +79,9 @@ This drives the "What's next" view and the AI loop (step 4).
 
 The rules that write status follow BMAD: dragging into **done** is a person's action. Dragging into backlog, in-progress or review writes the matching status (`statusForDrop`), and is shown as a manual override of the agent's status.
 
-## 4. Open questions
+## 4. Decisions
 
-- Should the GitHub adapter commit straight to a branch, or always go through a PR? Proposed: a PR per session of edits.
-- Should `.memlog.md` and plan `## Code Review` blocks show in the detail view? Proposed: yes, read-only tabs.
-- v6 projects: read-only plus a migrate prompt, or write support too? Proposed: read-only.
+- **GitHub writes go through a pull request.** One `bmad-board/<timestamp>` branch and one PR per editing session, with one commit per board action.
+- **Plans and code review show read-only.** The detail view shows the plan body (the build's criteria and its `## Code Review` blocks). Agents own those files.
+- **v6 projects are read-only.** The board points to `bmad migrate method` instead of writing the old layout.
+- **The local server commits but never pushes**, the same as BMAD's repo store.

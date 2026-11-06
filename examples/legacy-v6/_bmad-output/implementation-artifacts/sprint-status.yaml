@@ -1,0 +1,8 @@
+project: Legacy shop
+development_status:
+  epic-1: in-progress
+  1-1-user-signup: done
+  1-2-password-reset: review
+  1-3-profile-page: ready-for-dev
+  epic-2: backlog
+  2-1-order-history: backlog
