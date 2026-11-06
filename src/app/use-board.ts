@@ -63,17 +63,17 @@ export function useBoard() {
     setWorkspaces((all) => all.filter((w) => w.store.id !== id));
   }, []);
 
-  const apply = useCallback(async (id: string, changes: TicketChange[], message?: string) => {
+  /** Resolves to the change result, or to an Error that says why it was not saved. */
+  const apply = useCallback(async (id: string, changes: TicketChange[], message?: string): Promise<ChangeResult | Error> => {
     const ws = workspaces.find((w) => w.store.id === id);
-    if (!ws) return;
+    if (!ws) return new Error('That project is no longer connected.');
     try {
       const result = await ws.store.apply(changes, loadAuthor(), message);
       patch(id, { lastResult: result });
       await reload(ws.store);
       return result;
     } catch (cause) {
-      patch(id, { error: cause instanceof Error ? cause.message : String(cause) });
-      return undefined;
+      return cause instanceof Error ? cause : new Error(String(cause));
     }
   }, [workspaces, patch, reload]);
 

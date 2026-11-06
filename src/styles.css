@@ -1,14 +1,495 @@
+/* Theme tokens, base layer and motion utilities from Kaneo (MIT, see THIRD_PARTY_NOTICES.md). */
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "tw-animate-css";
 
-:root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #20212a;
-  background: #f7f8fa;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--foreground) !important;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
-* { box-sizing: border-box; }
-body { min-width: 360px; min-height: 100vh; margin: 0; }
-button, input, select { font: inherit; }
-button { cursor: pointer; }
+@custom-variant dark (&:is(.dark *));
+
+/* Gives small icon-only controls a 44px touch target on touch screens without
+   changing their visual size (same idea as Button's pointer-coarse ::after).
+   The element must be positioned (`relative` or `absolute`). */
+@keyframes delayed-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+@utility delayed-reveal {
+  animation: delayed-reveal 200ms var(--ease-out) 250ms both;
+}
+
+@keyframes shell-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes shell-rise {
+  from {
+    translate: 0 8px;
+    scale: 0.995;
+  }
+}
+
+@utility motion-shell-enter {
+  animation: shell-enter 400ms var(--ease-out) backwards;
+}
+
+@utility shell-pending {
+  & [data-slot="sidebar-inner"] > *,
+  & [data-slot="sidebar-inset"] > * {
+    opacity: 0;
+  }
+}
+
+@utility shell-reveal {
+  & [data-slot="sidebar-inner"] > *,
+  & [data-slot="sidebar-inset"] > * {
+    animation: shell-enter 150ms var(--ease-out) backwards;
+  }
+}
+
+@utility motion-shell-rise {
+  animation: shell-rise 500ms var(--ease-out) backwards;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility touch-hitbox {
+  @media (pointer: coarse) {
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 2.75rem);
+      height: max(100%, 2.75rem);
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+/* Reduced motion: keep opacity feedback, drop movement (scale/translate) and
+   container morphs. Tailwind v4 scale/translate utilities use the standalone
+   CSS properties, so forcing them here neutralizes entrance/exit movement
+   while transition-property keeps the fade. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="popover-popup"],
+  [data-slot="select-popup"],
+  [data-slot="menu-popup"],
+  [data-slot="menu-sub-content"],
+  [data-slot="tooltip-popup"],
+  [data-slot="context-menu-content"],
+  [data-slot="dialog-popup"],
+  [data-slot="alert-dialog-popup"],
+  [data-slot="command-dialog-popup"],
+  [data-slot="sheet-popup"],
+  [data-slot="sidebar"][data-mobile="true"],
+  [data-slot="toast"],
+  [data-slot="toast-popup"] {
+    transition-property: opacity !important;
+  }
+
+  [data-slot="sidebar-menu-badge"],
+  [data-slot="collapsible-panel"],
+  [data-slot="accordion-panel"] {
+    transition: none !important;
+  }
+
+  /* dnd-kit writes the shuffle transition inline, so this needs !important. The
+     dragged element still tracks the pointer; only the reflow is neutralized. */
+  [data-kaneo-sortable] {
+    transition: none !important;
+  }
+}
+
+
+@theme inline {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --animate-skeleton: skeleton 2s -1s infinite linear;
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--font-mono);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-input: var(--input);
+  --color-info-foreground: var(--info-foreground);
+  --color-info: var(--info);
+  --color-foreground: var(--foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive: var(--destructive);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-highlight: var(--code-highlight);
+  --color-code: var(--code);
+  --color-board-lane: var(--board-lane);
+  --color-board-card: var(--board-card);
+  --color-board-card-border: var(--board-card-border);
+  --color-board-card-border-hover: var(--board-card-border-hover);
+  --color-board-card-selected: var(--board-card-selected);
+  --color-board-card-selected-border: var(--board-card-selected-border);
+  --color-board-card-focus: var(--board-card-focus);
+  --color-board-card-ring: var(--board-card-ring);
+  --color-board-card-done: var(--board-card-done);
+  --color-board-card-done-border: var(--board-card-done-border);
+  --color-board-id: var(--board-id);
+  --color-board-id-done: var(--board-id-done);
+  --color-board-title: var(--board-title);
+  --color-board-title-done: var(--board-title-done);
+  --color-chip-border: var(--chip-border);
+  --color-chip-border-hover: var(--chip-border-hover);
+  --color-chip-hover: var(--chip-hover);
+  --color-chip-border-open: var(--chip-border-open);
+  --color-chip-open: var(--chip-open);
+  --color-chip-foreground: var(--chip-foreground);
+  --color-chip-muted: var(--chip-muted);
+  --color-chip-icon: var(--chip-icon);
+  --color-priority-bar: var(--priority-bar);
+  --color-priority-bar-empty: var(--priority-bar-empty);
+  --color-priority-low: var(--priority-low);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-high: var(--priority-high);
+  --color-priority-urgent: var(--priority-urgent);
+  --color-due-overdue: var(--due-overdue);
+  --color-avatar: var(--avatar);
+  --color-avatar-selected: var(--avatar-selected);
+  --color-avatar-done: var(--avatar-done);
+  --color-avatar-border: var(--avatar-border);
+  --color-avatar-foreground: var(--avatar-foreground);
+  --color-avatar-foreground-done: var(--avatar-foreground-done);
+  --color-avatar-unassigned: var(--avatar-unassigned);
+  --color-avatar-unassigned-foreground: var(--avatar-unassigned-foreground);
+  --shadow-board-card: var(--board-card-shadow);
+  --color-border: var(--border);
+  --color-background: var(--background);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  @keyframes skeleton {
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes caret-blink {
+    0%,
+    70%,
+    100% {
+      opacity: 1;
+    }
+    20%,
+    50% {
+      opacity: 0;
+    }
+  }
+}
+
+:root {
+  --font-sans:
+    "Geist Variable",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono:
+    "Geist Mono Variable",
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  --radius: 0.625rem;
+  --accent: --alpha(var(--color-black) / 4%);
+  --accent-foreground: var(--color-neutral-800);
+  --background: var(--color-white);
+  --border: --alpha(var(--color-black) / 8%);
+  --card: var(--color-white);
+  --card-foreground: var(--color-neutral-800);
+  --destructive: var(--color-red-500);
+  --destructive-foreground: var(--color-red-700);
+  --foreground: var(--color-neutral-800);
+  --info: var(--color-blue-500);
+  --info-foreground: var(--color-blue-700);
+  --input: --alpha(var(--color-black) / 10%);
+  --muted: --alpha(var(--color-black) / 4%);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
+  --popover: var(--color-white);
+  --popover-foreground: var(--color-neutral-800);
+  --primary: var(--color-neutral-800);
+  --primary-foreground: var(--color-neutral-50);
+  --ring: var(--color-neutral-400);
+  --secondary: --alpha(var(--color-black) / 4%);
+  --secondary-foreground: var(--color-neutral-800);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-700);
+  --warning: var(--color-amber-500);
+  --warning-foreground: var(--color-amber-700);
+  --chart-1: var(--color-orange-600);
+  --chart-2: var(--color-teal-600);
+  --chart-3: var(--color-cyan-900);
+  --chart-4: var(--color-amber-400);
+  --chart-5: var(--color-amber-500);
+  --sidebar: var(--color-neutral-50);
+  --sidebar-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-800) 64%,
+    var(--sidebar)
+  );
+  --sidebar-primary: var(--color-neutral-800);
+  --sidebar-primary-foreground: var(--color-neutral-50);
+  --sidebar-accent: --alpha(var(--color-black) / 4%);
+  --sidebar-accent-foreground: var(--color-neutral-800);
+  --sidebar-border: --alpha(var(--color-black) / 6%);
+  --sidebar-ring: var(--color-neutral-400);
+  --sidebar-active: linear-gradient(
+    to bottom,
+    var(--color-white),
+    var(--color-neutral-100)
+  );
+  --sidebar-active-shadow:
+    inset 0 1px 0 var(--color-white),
+    0 0 0 1px --alpha(var(--color-black) / 7%),
+    0 1px 2px --alpha(var(--color-black) / 6%),
+    0 2px 6px --alpha(var(--color-black) / 3%);
+  --code: var(--color-white);
+  --code-foreground: var(--foreground);
+  --code-highlight: --alpha(var(--color-black) / 4%);
+  --board-lane: #00000005;
+  --board-card: #ffffff;
+  --board-card-border: #00000014;
+  --board-card-border-hover: #0000002e;
+  --board-card-selected: #f2f2f2;
+  --board-card-selected-border: #00000038;
+  --board-card-focus: #8a8a8a;
+  --board-card-ring: #8a8a8a40;
+  --board-card-shadow: 0 1px 2px #0000000a;
+  --board-card-done: #ffffff99;
+  --board-card-done-border: #0000000f;
+  --board-id: #8a8a8a;
+  --board-id-done: #a3a3a3;
+  --board-title: #171717;
+  --board-title-done: #737373;
+  --chip-border: #00000017;
+  --chip-border-hover: #00000029;
+  --chip-hover: #0000000a;
+  --chip-border-open: #00000033;
+  --chip-open: #0000000f;
+  --chip-foreground: #404040;
+  --chip-muted: #737373;
+  --chip-icon: #8a8a8a;
+  --priority-bar: #525252;
+  --priority-bar-empty: #00000021;
+  --priority-low: #2563eb;
+  --priority-medium: #d97706;
+  --priority-high: #ea580c;
+  --priority-urgent: #dc2626;
+  --due-overdue: #dc2626;
+  --avatar: #e5e5e5;
+  --avatar-selected: #e0e0e0;
+  --avatar-done: #ededed;
+  --avatar-border: #00000017;
+  --avatar-foreground: #404040;
+  --avatar-foreground-done: #737373;
+  --avatar-unassigned: #f5f5f5;
+  --avatar-unassigned-foreground: #8a8a8a;
+}
+
+.dark {
+  --accent: --alpha(var(--color-white) / 4%);
+  --accent-foreground: var(--color-neutral-100);
+  --background: color-mix(
+    in srgb,
+    var(--color-neutral-950) 96%,
+    var(--color-white)
+  );
+  --border: --alpha(var(--color-white) / 6%);
+  --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
+  --card-foreground: var(--color-neutral-100);
+  --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
+  --destructive-foreground: var(--color-red-400);
+  --foreground: var(--color-neutral-100);
+  --info: var(--color-blue-500);
+  --info-foreground: var(--color-blue-400);
+  --input: --alpha(var(--color-white) / 8%);
+  --muted: --alpha(var(--color-white) / 4%);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
+  --popover-foreground: var(--color-neutral-100);
+  --primary: var(--color-neutral-100);
+  --primary-foreground: var(--color-neutral-800);
+  --ring: var(--color-neutral-500);
+  --secondary: --alpha(var(--color-white) / 4%);
+  --secondary-foreground: var(--color-neutral-100);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-400);
+  --warning: var(--color-amber-500);
+  --warning-foreground: var(--color-amber-400);
+  --chart-1: var(--color-blue-700);
+  --chart-2: var(--color-emerald-500);
+  --chart-3: var(--color-amber-500);
+  --chart-4: var(--color-purple-500);
+  --chart-5: var(--color-rose-500);
+  --sidebar: color-mix(
+    in srgb,
+    var(--color-neutral-950) 97%,
+    var(--color-white)
+  );
+  --sidebar-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-100) 64%,
+    var(--sidebar)
+  );
+  --sidebar-primary: var(--color-neutral-100);
+  --sidebar-primary-foreground: var(--color-neutral-800);
+  --sidebar-accent: --alpha(var(--color-white) / 4%);
+  --sidebar-accent-foreground: var(--color-neutral-100);
+  --sidebar-border: --alpha(var(--color-white) / 5%);
+  --sidebar-ring: var(--color-neutral-400);
+  --sidebar-active: linear-gradient(
+    to bottom,
+    --alpha(var(--color-white) / 9%),
+    --alpha(var(--color-white) / 4%)
+  );
+  --sidebar-active-shadow:
+    inset 0 1px 0 --alpha(var(--color-white) / 8%),
+    0 0 0 1px --alpha(var(--color-white) / 6%),
+    0 1px 2px --alpha(var(--color-black) / 40%);
+  --code: color-mix(in srgb, var(--background) 98%, var(--color-white));
+  --code-foreground: var(--foreground);
+  --code-highlight: --alpha(var(--color-white) / 4%);
+  --board-lane: #0000001f;
+  --board-card: #1c1c1c;
+  --board-card-border: transparent;
+  --board-card-border-hover: #ffffff2e;
+  --board-card-selected: #262626;
+  --board-card-selected-border: #ffffff3d;
+  --board-card-focus: #a3a3a3;
+  --board-card-ring: #a3a3a333;
+  --board-card-shadow: 0 1px 2px #00000033, 0 4px 12px -4px #00000059;
+  --board-card-done: #ffffff03;
+  --board-card-done-border: #ffffff0a;
+  --board-id: #707070;
+  --board-id-done: #5c5c5c;
+  --board-title: #ededed;
+  --board-title-done: #707070;
+  --chip-border: #ffffff17;
+  --chip-border-hover: #ffffff29;
+  --chip-hover: #ffffff0a;
+  --chip-border-open: #ffffff33;
+  --chip-open: #ffffff0f;
+  --chip-foreground: #cfcfcf;
+  --chip-muted: #8f8f8f;
+  --chip-icon: #8a8a8a;
+  --priority-bar: #a3a3a3;
+  --priority-bar-empty: #ffffff24;
+  --priority-low: #60a5fa;
+  --priority-medium: #fbbf24;
+  --priority-high: #fb923c;
+  --priority-urgent: #e5484d;
+  --due-overdue: #ff6467;
+  --avatar: #2e2e2e;
+  --avatar-selected: #383838;
+  --avatar-done: #222222;
+  --avatar-border: #ffffff17;
+  --avatar-foreground: #d4d4d4;
+  --avatar-foreground-done: #707070;
+  --avatar-unassigned: #262626;
+  --avatar-unassigned-foreground: #8a8a8a;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading font-semibold tracking-tight;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  *::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+}
+
+/* Ticket markdown: rendered BMAD story files and plans. */
+@layer components {
+  .ticket-md {
+    @apply text-sm leading-6 text-foreground/85;
+  }
+  .ticket-md > * + * { @apply mt-3; }
+  .ticket-md h1 { @apply text-lg; }
+  .ticket-md h2 { @apply mt-6 text-base; }
+  .ticket-md h3, .ticket-md h4 { @apply mt-4 text-sm; }
+  .ticket-md ul { @apply list-disc pl-5; }
+  .ticket-md ol { @apply list-decimal pl-5; }
+  .ticket-md li + li { @apply mt-1; }
+  .ticket-md li:has(> input[type="checkbox"]) { @apply list-none -ml-5; }
+  .ticket-md code { @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]; }
+  .ticket-md pre { @apply overflow-x-auto rounded-lg bg-muted p-3 text-xs; }
+  .ticket-md pre code { @apply bg-transparent p-0; }
+  .ticket-md blockquote { @apply border-l-2 border-border pl-3 text-muted-foreground; }
+  .ticket-md a { @apply text-primary underline underline-offset-2; }
+  .ticket-md table { @apply w-full text-xs; }
+  .ticket-md th, .ticket-md td { @apply border border-border px-2 py-1 text-left; }
+  .ticket-md strong { @apply font-semibold text-foreground; }
+}

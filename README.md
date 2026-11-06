@@ -14,6 +14,15 @@ See [docs/domain-model.md](docs/domain-model.md) for the model and how it maps t
 
 Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-status.yaml`) open read-only. Run `bmad migrate method` to move them to the ticket tree.
 
+## What you can do on the board
+
+- **Board and list views** of every initiative, epic and backlog ticket, in the Kaneo layout. Each card shows readiness the way BMAD's own `tickets.py next` reports it: ready, blocked (and on what), or needs refining.
+- **Drag a card between lanes** to set its status, or pick one in the ticket sheet. **Drag rows in the list** to change an epic's build order.
+- **Edit tickets.** You can change the description, risk, needs-a-person and assignee, and block or unblock a ticket with a reason.
+- **Add tickets.** New stories and spikes go into an epic's `tickets.toml`. Bugs go into `backlog/`.
+- **⌘K** jumps to any ticket. **Copy ref** puts `1.2`-style refs on your clipboard to hand to an agent ("build story 1.2").
+- Light and dark themes.
+
 The board follows BMAD's rules for who changes what: status, assignee and blocks go to each story's `*-plan.md`, and order and dependencies go to `tickets.toml`. Only a person moves a ticket to Done.
 
 ## Develop
@@ -24,5 +33,7 @@ bun run server -- --root examples/shop   # API on :33714 (needs git in the root 
 bun run dev                              # app on :33713, /api proxied to the server
 bun test && bun run typecheck
 ```
+
+The UI borrows Kaneo's primitives and theme; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 `examples/shop` is a small ticket-tree project and `examples/legacy-v6` a v6 one; tests run against both.

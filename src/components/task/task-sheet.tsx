@@ -1,0 +1,96 @@
+/** The ticket sheet, laid out like Kaneo's task-details-sheet: content on the left, properties rail on the right. */
+import { ArrowUpRight, Copy, FileText, X } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { toast } from 'sonner';
+import { useBoardContext } from '@/app/board-context';
+import { refOf, type Ticket } from '@/app/view-model';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetPopup, SheetTitle } from '@/components/ui/sheet';
+import { Assignee, ReadinessChip, StateIcon } from '../board/chips';
+import { Markdown } from './markdown';
+import { PropertiesRail } from './properties-rail';
+import { TaskDescription } from './task-description';
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mt-8">
+      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function Relations({ ticket }: { ticket: Ticket }) {
+  const { tickets, select } = useBoardContext();
+  const peers = tickets.filter((t) => t.workspaceId === ticket.workspaceId);
+  const waitsOn = ticket.leaf.after.map((k) => peers.find((t) => t.leaf.key === k));
+  const blocks = peers.filter((t) => t.leaf.after.includes(ticket.leaf.key));
+  const gates = ticket.leaf.gatedBy;
+  if (!waitsOn.length && !blocks.length && !gates.length) return null;
+  const item = (t: Ticket | undefined, key: string) => (
+    <button key={key} type="button" disabled={!t} onClick={() => t && select(t.uid)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent disabled:cursor-default">
+      {t ? <StateIcon state={t.leaf.state} className="size-3.5" /> : null}
+      <span className="w-10 shrink-0 font-mono text-[11px] text-board-id">{t?.ref ?? refOf(key, peers)}</span>
+      <span className="truncate">{t?.leaf.title ?? key}</span>
+    </button>
+  );
+  return (
+    <Section title="Relations">
+      {waitsOn.length > 0 && <div className="mb-3"><div className="mb-1 text-xs text-muted-foreground">Waits on</div>{waitsOn.map((t, i) => item(t, ticket.leaf.after[i] ?? String(i)))}</div>}
+      {gates.length > 0 && <div className="mb-3"><div className="mb-1 text-xs text-muted-foreground">Its epic waits for these epics to be done</div>{gates.map((g) => <div key={g} className="px-2 py-1 font-mono text-xs">{g}</div>)}</div>}
+      {blocks.length > 0 && <div><div className="mb-1 text-xs text-muted-foreground">Blocks</div>{blocks.map((t) => item(t, t.uid))}</div>}
+    </Section>
+  );
+}
+
+export function TaskSheet() {
+  const { selected, select } = useBoardContext();
+  const t = selected;
+  return (
+    <Sheet open={!!t} onOpenChange={(open) => !open && select(null)}>
+      <SheetPopup side="right" showCloseButton={false} className="w-full max-w-full gap-0 p-0 sm:max-w-lg md:max-w-2xl lg:max-w-4xl">
+        {t && (
+          <>
+            <header className="flex h-12 shrink-0 items-center gap-2 border-border border-b px-4">
+              <span className="font-mono text-xs text-muted-foreground">{t.ref}</span>
+              <span className="text-xs text-muted-foreground">· {t.workspace}</span>
+              <div className="ml-auto flex items-center gap-1">
+                <Button size="icon-sm" variant="ghost" aria-label="Copy BMAD ref" onClick={() => { void navigator.clipboard?.writeText(t.ref); toast.success(`Copied ${t.ref}`, { description: `Hand it to an agent, for example "build story ${t.ref}".` }); }}><Copy /></Button>
+                <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={() => select(null)}><X /></Button>
+              </div>
+            </header>
+            <div key={t.uid} className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+              <div className="min-w-0 flex-1 px-5 pt-5 pb-10 lg:overflow-y-auto lg:px-9 lg:pt-7">
+                <div className="mb-2 flex items-center gap-2">
+                  <ReadinessChip readiness={t.readiness} />
+                  {t.leaf.drift && <span className="text-xs text-warning">The story file and tickets.toml disagree on {Object.keys(t.leaf.drift).join(' and ')}</span>}
+                </div>
+                <SheetTitle className="text-xl font-semibold leading-7">{t.leaf.title}</SheetTitle>
+                {t.readiness === 'blocked' && (t.blockedReason || t.waitingOn.length > 0) && (
+                  <p className="mt-2 text-sm text-destructive">{t.blockedReason ?? `Waiting on ${t.waitingOn.map((k) => refOf(k, [])).join(', ')}`}</p>
+                )}
+                <PropertiesRail ticket={t} className="-mx-5 mt-4 border-border border-y lg:hidden" />
+                <div className="mt-6"><TaskDescription ticket={t} /></div>
+                <Relations ticket={t} />
+                {t.leaf.plan?.body.trim() && (
+                  <Section title="Build plan">
+                    <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Assignee name={t.leaf.plan.assignee} />{t.leaf.plan.assignee ?? 'No assignee'} · {t.leaf.plan.path.split('/').pop()}</div>
+                    <Markdown source={t.leaf.plan.body} />
+                  </Section>
+                )}
+                <Section title="Files">
+                  {[t.leaf.file?.path, t.leaf.plan?.path, t.leaf.folder === 'backlog' ? undefined : `${t.leaf.dir}/tickets.toml`].filter((p): p is string => !!p).map((p) => (
+                    <div key={p} className="mb-1 flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                      <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span><ArrowUpRight className="ml-auto size-3 shrink-0" />
+                    </div>
+                  ))}
+                </Section>
+              </div>
+              <PropertiesRail ticket={t} className="hidden w-80 shrink-0 overflow-y-auto border-border border-l lg:flex" />
+            </div>
+          </>
+        )}
+      </SheetPopup>
+    </Sheet>
+  );
+}
