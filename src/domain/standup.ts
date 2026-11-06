@@ -3,6 +3,7 @@
  * what they finished since the last stand-up, what they're on, what waits on review, and what blocks them.
  * "Finished" comes from git: commits by that member since the cut-off, and the tickets those commits touched.
  */
+import { isAgent, isHidden, type BoardConfig } from './board-config';
 import type { Leaf } from './ticket-tree';
 
 /** A commit as the stand-up sees it. The store's Activity fits this shape. */
@@ -66,9 +67,9 @@ export function lastWorkingDay(now: Date): Date {
   return d;
 }
 
-export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T[], commits: StandupCommit[], since: Date): Standup<T> {
+export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T[], commits: StandupCommit[], since: Date, config?: BoardConfig): Standup<T> {
   const members = new Map<string, StandupMember<T>>();
-  const member = (name: string, agent = isAgentName(name)) => {
+  const member = (name: string, agent = isAgent(name, config)) => {
     const id = memberId(name);
     let m = members.get(id);
     if (!m) {
@@ -121,7 +122,9 @@ export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T
   // Built since the cut-off already shows as finished; don't list it again as waiting on review.
   for (const m of members.values()) m.review = m.review.filter((t) => !m.finished.includes(t));
 
-  const ordered = [...members.values()].sort((a, b) => Number(a.agent) - Number(b.agent) || a.name.localeCompare(b.name));
+  // Hidden people (CI users, ex-teammates) drop out unless they still hold tickets.
+  const shown = [...members.values()].filter((m) => !isHidden(m.name, config) || m.doing.length + m.review.length + m.blocked.length + m.upNext.length > 0);
+  const ordered = shown.sort((a, b) => Number(a.agent) - Number(b.agent) || a.name.localeCompare(b.name));
   return { since, members: ordered, upForGrabs, unowned };
 }
 

@@ -1,5 +1,5 @@
 /** Projects → initiatives → epics, like Kaneo's workspace/project sidebar. */
-import { FolderOpen, GitBranch, Github, Inbox, KanbanSquare, Layers, LogOut, RefreshCw, Server, Target } from 'lucide-react';
+import { FolderOpen, GitBranch, Github, Inbox, KanbanSquare, Layers, LogOut, PanelLeftClose, PanelLeftOpen, RefreshCw, Server, Settings, Target } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useBoardContext, type Scope } from '@/app/board-context';
@@ -101,6 +101,7 @@ export function AppSidebar() {
       <div className="flex h-12 items-center gap-2 px-4">
         <div className="grid size-6 place-items-center rounded-md bg-primary text-primary-foreground"><KanbanSquare className="size-3.5" /></div>
         <span className="font-semibold text-sm">BMAD board</span>
+        <Button size="icon-xs" variant="ghost" className="ml-auto text-sidebar-foreground/60" aria-label="Hide the sidebar" title="Hide the sidebar ([)" onClick={() => state.preferences.update({ sidebarOpen: false })}><PanelLeftClose /></Button>
       </div>
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">
         <NavItem active={is({})} onClick={() => setScope({})} icon={Layers} label="All tickets" count={tickets.length ? count(() => true) : undefined} />
@@ -134,7 +135,21 @@ export function AppSidebar() {
           Your name in commits
           <Input size="sm" value={name} placeholder="e.g. Dipak" onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && saveAuthor(name.trim())} />
         </label>
+        <Button size="sm" variant={state.view === 'settings' ? 'secondary' : 'ghost'} className="justify-start" onClick={() => { state.select(null); state.setView('settings'); }}><Settings />Settings</Button>
       </div>
+    </aside>
+  );
+}
+
+/** The sidebar folded away: a thin rail that keeps the way back, and Settings, in reach. */
+export function SidebarRail() {
+  const state = useBoardContext();
+  return (
+    <aside className="flex w-12 shrink-0 flex-col items-center gap-1 bg-sidebar py-3 text-sidebar-foreground">
+      <div className="mb-2 grid size-6 place-items-center rounded-md bg-primary text-primary-foreground"><KanbanSquare className="size-3.5" /></div>
+      <Button size="icon-sm" variant="ghost" aria-label="Show the sidebar" title="Show the sidebar ([)" onClick={() => state.preferences.update({ sidebarOpen: true })}><PanelLeftOpen /></Button>
+      <Button size="icon-sm" variant="ghost" aria-label="All tickets" title="All tickets" onClick={() => state.setScope({})}><Layers /></Button>
+      <Button size="icon-sm" variant={state.view === 'settings' ? 'secondary' : 'ghost'} className="mt-auto" aria-label="Settings" title="Settings" onClick={() => { state.select(null); state.setView('settings'); }}><Settings /></Button>
     </aside>
   );
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useBoard } from './use-board';
+import { loadPreferences, usePreferences } from './preferences';
+import { loadAuthor, useBoard } from './use-board';
 import { ticketsOf, type Ticket } from './view-model';
 
 /** What the sidebar narrows the board to. */
@@ -10,7 +11,7 @@ export interface Scope {
   epic?: string;
 }
 
-export type View = 'board' | 'list' | 'next' | 'standup' | 'graph';
+export type View = 'board' | 'list' | 'next' | 'standup' | 'graph' | 'settings';
 
 function readHash(): { ref?: string; ws?: string; full: boolean } {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -19,8 +20,10 @@ function readHash(): { ref?: string; ws?: string; full: boolean } {
 
 function useBoardState() {
   const board = useBoard();
+  const preferences = usePreferences();
+  const [mineOnly, setMineOnly] = useState(false);
   const [scope, setScope] = useState<Scope>({});
-  const [view, setView] = useState<View>('next');
+  const [view, setView] = useState<View>(() => loadPreferences().defaultView);
   const [search, setSearch] = useState('');
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'github' | 'new-ticket' | 'search' | null>(null);
@@ -29,6 +32,7 @@ function useBoardState() {
     () => board.workspaces.flatMap((w) => (w.tree ? ticketsOf(w.store.id, w.store.label, w.tree, w.store.capabilities.write) : [])),
     [board.workspaces],
   );
+  const me = loadAuthor().name === 'board user' ? '' : loadAuthor().name.trim().toLowerCase();
   const inScope = useMemo(() => {
     const q = search.trim().toLowerCase();
     return tickets.filter((t) =>
@@ -36,9 +40,10 @@ function useBoardState() {
       (!scope.workspaceId || t.workspaceId === scope.workspaceId) &&
       (!scope.initiative || t.initiative?.slug === scope.initiative) &&
       (!scope.epic || (scope.epic === 'backlog' ? t.leaf.folder === 'backlog' : t.epic?.slug === scope.epic)) &&
+      (!mineOnly || (!!me && t.leaf.plan?.assignee?.trim().toLowerCase() === me)) &&
       (!q || `${t.ref} ${t.leaf.title} ${t.leaf.plan?.assignee ?? ''} ${t.epic?.title ?? ''} ${t.leaf.type}`.toLowerCase().includes(q)),
     );
-  }, [tickets, scope, search]);
+  }, [tickets, scope, search, mineOnly, me]);
   const selected: Ticket | null = tickets.find((t) => t.uid === selectedUid) ?? null;
   const [expanded, setExpanded] = useState(false);
 
@@ -65,7 +70,7 @@ function useBoardState() {
     if (!uid) setExpanded(false);
   };
 
-  return { board, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
+  return { board, preferences, mineOnly, setMineOnly, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
 }
 
 export type BoardState = ReturnType<typeof useBoardState>;

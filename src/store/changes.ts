@@ -2,7 +2,7 @@
  * Turns typed TicketChanges into file writes, following the repo-store rules in BMAD's board.md:
  * status, assignee and blocks go to the plan; entry fields go to tickets.toml; bodies to the leaf file.
  */
-import type { BreakdownEntry, Leaf, TicketChange, TicketTree } from '../domain';
+import { BOARD_CONFIG_PATH, boardConfigToml, type BreakdownEntry, type Leaf, type TicketChange, type TicketTree } from '../domain';
 import { replaceBody, setFrontmatter } from './frontmatter';
 import { joinPath, type FileSource, type FileWrite } from './file-source';
 import { allLeaves, titleSlug } from './load-tree';
@@ -101,6 +101,9 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
         write(change.path, change.text.endsWith('\n') ? change.text : `${change.text}\n`);
         break;
       }
+      case 'board-config':
+        write(BOARD_CONFIG_PATH, boardConfigToml(change.config));
+        break;
       case 'clear-block': {
         const leaf = leafOf(change.key);
         const path = planPath(leaf, tree);

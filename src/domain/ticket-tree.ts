@@ -1,3 +1,4 @@
+import type { BoardConfig } from './board-config';
 /**
  * Domain model of BMAD-METHOD's ticket tree, the source of truth the board reads and edits.
  *
@@ -169,4 +170,6 @@ export interface TicketTree {
   /** Layout the tree was read from. `v6` trees are read-only until migrated with `bmad migrate method`. */
   layout: 'ticket-tree' | 'v6';
   problems: string[];
+  /** Team-wide board settings from `_bmad/custom/bmad-board.toml`; defaults when the file is absent. */
+  board?: BoardConfig;
 }

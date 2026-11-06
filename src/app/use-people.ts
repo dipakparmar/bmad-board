@@ -1,6 +1,6 @@
 /** The roster for one workspace: git or GitHub people merged with names already used as assignees. */
 import { useEffect, useMemo, useState } from 'react';
-import { membersFromAssignees, mergeMembers, type Member } from '@/domain';
+import { isAgent, isHidden, membersFromAssignees, mergeMembers, type Member } from '@/domain';
 import { useBoardContext } from './board-context';
 
 // One fetch per workspace per page load; the sources cache across loads themselves.
@@ -23,8 +23,12 @@ export function usePeople(workspaceId: string | undefined): Member[] {
       live = false;
     };
   }, [ws]);
+  const config = ws?.tree?.board;
   return useMemo(
-    () => mergeMembers(remote, membersFromAssignees(tickets.filter((t) => t.workspaceId === workspaceId).map((t) => t.leaf.plan?.assignee))),
-    [remote, tickets, workspaceId],
+    () =>
+      mergeMembers(remote, membersFromAssignees(tickets.filter((t) => t.workspaceId === workspaceId).map((t) => t.leaf.plan?.assignee)))
+        .filter((m) => !isHidden(m.name, config) && !(m.login && isHidden(m.login, config)))
+        .map((m) => (config && isAgent(m.name, config) ? { ...m, agent: true } : m)),
+    [remote, tickets, workspaceId, config],
   );
 }

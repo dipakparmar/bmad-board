@@ -65,6 +65,12 @@ describe('FileTicketStore.apply', () => {
     await expect(store.apply([{ kind: 'standup-notes', path: 'README.md', text: 'x' }], person)).rejects.toThrow('stand-up notes go under');
   });
 
+  test('board settings are committed and read back with the tree', async () => {
+    const { store } = await setup();
+    await store.apply([{ kind: 'board-config', config: { wipLimits: { 'in-progress': 2 }, agents: ['qa-runner'], hidden: [] } }], person);
+    expect((await store.load()).board).toEqual({ wipLimits: { 'in-progress': 2 }, agents: ['qa-runner'], hidden: [] });
+  });
+
   test('clear-block removes the block fields', async () => {
     const { src, store } = await setup();
     await store.apply([{ kind: 'mark', key: 'epic-pricing-rules/2', status: 'blocked', blockedReason: 'x' }], person);

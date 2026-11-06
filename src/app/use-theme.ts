@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+/** Light or dark, shared by every component that asks (the header toggle and Settings stay in step). */
+import { useCallback, useSyncExternalStore } from 'react';
 
-type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark';
 const KEY = 'bmad-board:theme';
 
 function initial(): Theme {
@@ -13,21 +14,29 @@ function initial(): Theme {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+let current: Theme = initial();
+const listeners = new Set<() => void>();
+document.documentElement.classList.toggle('dark', current === 'dark');
+
+export function setTheme(next: Theme) {
+  current = next;
+  document.documentElement.classList.toggle('dark', next === 'dark');
+  try {
+    localStorage.setItem(KEY, next);
+  } catch {
+    /* ignore */
+  }
+  for (const l of listeners) l();
+}
+
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(initial);
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
-  const toggle = useCallback(() => {
-    setTheme((t) => {
-      const next = t === 'dark' ? 'light' : 'dark';
-      try {
-        localStorage.setItem(KEY, next);
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
-  return { theme, toggle };
+  const theme = useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => current,
+  );
+  const toggle = useCallback(() => setTheme(current === 'dark' ? 'light' : 'dark'), []);
+  return { theme, toggle, setTheme };
 }

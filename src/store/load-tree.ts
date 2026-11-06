@@ -4,7 +4,10 @@
  */
 import { parse as parseToml } from 'smol-toml';
 import {
+  BOARD_CONFIG_PATH,
   boardState,
+  parseBoardConfig,
+  type BoardConfig,
   isLeafStatus,
   type BoardState,
   type BreakdownEntry,
@@ -84,6 +87,10 @@ export async function readConfig(src: FileSource, problems: string[] = []): Prom
   const store = ((await readToml(src, '_bmad/custom/ticketing-store-config.toml', problems)).tickets ?? {}) as Toml;
   const tracker = (str(store.store) || 'repo') as TrackerKind;
   return { outputFolder: joinPath(outputFolder), activeInitiative: str(core.active_initiative).trim() || undefined, tracker };
+}
+
+export async function readBoardConfig(src: FileSource, problems: string[] = []): Promise<BoardConfig> {
+  return parseBoardConfig(await readToml(src, BOARD_CONFIG_PATH, problems));
 }
 
 /** A leaf before its `after` refs are resolved. */
@@ -363,13 +370,14 @@ export async function loadTicketTree(src: FileSource): Promise<TicketTree> {
   const hasBacklog = entries.some((e) => e.kind === 'dir' && e.name === 'backlog');
   if (initiatives.length === 0 && !hasBacklog) {
     const v6 = await loadV6Tree(src, config.outputFolder);
-    if (v6) return { ...v6, tracker: config.tracker, problems: [...problems, ...v6.problems] };
+    if (v6) return { ...v6, tracker: config.tracker, problems: [...problems, ...v6.problems], board: await readBoardConfig(src, problems) };
   }
   const backlogRaw = hasBacklog ? await loadFolder(src, backlogDir, 'backlog', '', [], problems) : [];
   const backlog = finish(backlogRaw, resolveAfter(backlogRaw, new Map(), new Set(), problems), new Map());
   // Active initiative first, as BMAD's `next` reports it.
   initiatives.sort((a, b) => Number(b.slug === config.activeInitiative) - Number(a.slug === config.activeInitiative));
-  return { projectRoot: '', outputFolder: config.outputFolder, activeInitiative: config.activeInitiative, tracker: config.tracker, initiatives, backlog, layout: 'ticket-tree', problems };
+  const board = await readBoardConfig(src, problems);
+  return { projectRoot: '', outputFolder: config.outputFolder, activeInitiative: config.activeInitiative, tracker: config.tracker, initiatives, backlog, layout: 'ticket-tree', problems, board };
 }
 
 /** Every leaf in the tree, initiatives first in their build order, then the backlog. */

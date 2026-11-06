@@ -127,7 +127,8 @@ function useTimer(running: boolean, resetKey: unknown) {
 
 export function StandupView() {
   const { inScope, board, scope } = useBoardContext();
-  const [since, setSince] = useState<Since>('workday');
+  const { preferences } = useBoardContext();
+  const [since, setSince] = useState<Since>(preferences.prefs.standupRange);
   const [turn, setTurn] = useState<number | null>(null);
 
   const ws = board.workspaces.find((w) => w.store.id === scope.workspaceId) ?? board.workspaces[0];
@@ -140,7 +141,7 @@ export function StandupView() {
       const actor = actorOf(a);
       return { sha: a.sha, date: a.date, subject: a.subject, actor: actor.name, agent: actor.agent, paths: a.paths, url: a.url };
     });
-    return standup(tickets, commits, cutoff);
+    return standup(tickets, commits, cutoff, ws?.tree?.board);
   }, [inScope, history, cutoff, ws]);
 
   const { members } = report;

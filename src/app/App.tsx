@@ -1,11 +1,13 @@
 import { AlertTriangle, X } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Toaster } from 'sonner';
 import { KanbanBoard } from '@/components/board/kanban-board';
 import { GitHubDialog } from '@/components/dialogs/github-dialog';
 import { NewTicketDialog } from '@/components/dialogs/new-ticket-dialog';
 import { SearchCommand } from '@/components/dialogs/search-command';
-import { AppSidebar } from '@/components/layout/app-sidebar';
+import { AppSidebar, SidebarRail } from '@/components/layout/app-sidebar';
+import { ShortcutsDialog } from '@/components/dialogs/shortcuts-dialog';
+import { SettingsView } from '@/components/settings/settings-view';
 import { EmptyState } from '@/components/layout/empty-state';
 import { Header } from '@/components/layout/header';
 import { ListView } from '@/components/list-view/list-view';
@@ -15,6 +17,7 @@ import { GraphView } from '@/components/graph/graph-view';
 import { TaskSheet, TicketPage } from '@/components/task/task-sheet';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { BoardProvider, useBoardContext } from './board-context';
+import { useShortcuts } from './use-shortcuts';
 
 function Notices() {
   const { board } = useBoardContext();
@@ -44,17 +47,20 @@ function Notices() {
 }
 
 function Shell() {
-  const { board, view, expanded, selected } = useBoardContext();
+  const state = useBoardContext();
+  const { board, view, expanded, selected, preferences } = state;
   const connected = board.workspaces.length > 0;
+  const [help, setHelp] = useState(false);
+  useShortcuts(state, useCallback(() => setHelp(true), []));
   return (
     <div className="flex h-dvh bg-sidebar">
-      <AppSidebar />
+      {preferences.prefs.sidebarOpen ? <AppSidebar /> : <SidebarRail />}
       <main className="my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs">
         {connected && expanded && selected ? <TicketPage /> : connected ? (
           <>
             <Header />
             <Notices />
-            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : <NextView />}</div>
+            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : view === 'settings' ? <SettingsView /> : <NextView />}</div>
           </>
         ) : <EmptyState />}
       </main>
@@ -62,6 +68,7 @@ function Shell() {
       <GitHubDialog />
       <NewTicketDialog />
       <SearchCommand />
+      <ShortcutsDialog open={help} onClose={() => setHelp(false)} />
     </div>
   );
 }

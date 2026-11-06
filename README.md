@@ -34,6 +34,12 @@ Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-s
 - **Assign people and agents.** The assignee field suggests people from git history and GitHub contributors, plus anyone already assigned, and still takes any name. Git is scanned once per HEAD (the last 5,000 commits within a year, configurable with `BMAD_BOARD_PEOPLE_COMMITS` and `BMAD_BOARD_PEOPLE_DAYS`), and GitHub's list is cached for six hours.
 - **Open a ticket full screen** from its panel. The URL (`#ticket=1.2&full=1`) links straight to it.
 - **⌘K** jumps to any ticket. **Copy ref** puts `1.2`-style refs on your clipboard to hand to an agent ("build story 1.2").
+- **Right-click a card** to open it, open it full screen, set its status, or copy its ref or link.
+- **Mine** (or `m`) shows only the tickets assigned to you.
+- **Keyboard shortcuts**, after Kaneo's: `g` then `n`/`b`/`l`/`d`/`u`/`s` to switch views, `c` for a new ticket, `/` to filter, `[` to fold the sidebar, and `?` for the full list.
+- **Settings** has two scopes:
+  - *Yours*, kept in this browser: theme, which fields cards show (with a live preview), compact cards, the Done column, the view the board opens on, the sidebar, and the stand-up range.
+  - *The project's*, committed to `_bmad/custom/bmad-board.toml` for the whole team and its agents: work-in-progress limits per column (a column over its limit is flagged), names that are agents, and people to leave out of suggestions and stand-up, such as CI users.
 - Light and dark themes.
 
 The board follows BMAD's rules for who changes what: status, assignee and blocks go to each story's `*-plan.md`, and order and dependencies go to `tickets.toml`. Only a person moves a ticket to Done.

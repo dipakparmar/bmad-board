@@ -13,6 +13,7 @@ function describe(c: TicketChange): string {
   switch (c.kind) {
     case 'mark': return `mark ${c.key} ${c.status}`;
     case 'clear-block': return `unblock ${c.key}`;
+    case 'board-config': return 'update board settings';
     case 'standup-notes': return `stand-up notes ${c.path.split('/').pop()?.replace(/^standup-|\.md$/g, '')}`;
     case 'assign': return c.assignee ? `assign ${c.key} to ${c.assignee}` : `unassign ${c.key}`;
     case 'edit-entry': return `edit ${c.key}`;

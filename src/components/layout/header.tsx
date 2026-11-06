@@ -1,4 +1,4 @@
-import { KanbanSquare, List, Moon, Network, Plus, Search, Sun, Users, Workflow } from 'lucide-react';
+import { KanbanSquare, Keyboard, List, Moon, Network, Plus, Search, Sun, UserRound, Users, Workflow } from 'lucide-react';
 import { useBoardContext, type View } from '@/app/board-context';
 import { useTheme } from '@/app/use-theme';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ const VIEWS: { id: View; label: string; icon: typeof List }[] = [
 ];
 
 export function Header() {
-  const { scope, board, view, setView, search, setSearch, setDialog, inScope } = useBoardContext();
+  const { scope, board, view, setView, search, setSearch, setDialog, inScope, mineOnly, setMineOnly } = useBoardContext();
   const { theme, toggle } = useTheme();
   const ws = board.workspaces.find((w) => w.store.id === scope.workspaceId);
   const initiative = ws?.tree?.initiatives.find((i) => i.slug === scope.initiative);
@@ -36,6 +36,7 @@ export function Header() {
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
           <Button size="sm" variant="outline" onClick={() => setDialog('search')} className="text-muted-foreground"><Search />Search<Kbd className="ml-1">⌘K</Kbd></Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}><Keyboard /></Button>
           <Button size="icon-sm" variant="ghost" aria-label="Toggle theme" onClick={toggle}>{theme === 'dark' ? <Sun /> : <Moon />}</Button>
           <Button size="sm" onClick={() => setDialog('new-ticket')}><Plus />New ticket</Button>
         </div>
@@ -48,7 +49,8 @@ export function Header() {
             </button>
           ))}
         </div>
-        <Input size="sm" className="ml-auto w-56" placeholder="Filter tickets" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Button size="sm" variant={mineOnly ? 'secondary' : 'ghost'} className={cn('ml-auto', mineOnly ? '' : 'text-muted-foreground')} aria-pressed={mineOnly} title="Only tickets assigned to you (m)" onClick={() => setMineOnly((v) => !v)}><UserRound />Mine</Button>
+        <Input size="sm" className="w-56" placeholder="Filter tickets" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
     </header>
   );
