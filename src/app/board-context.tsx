@@ -10,7 +10,7 @@ export interface Scope {
   epic?: string;
 }
 
-export type View = 'board' | 'list' | 'next' | 'standup';
+export type View = 'board' | 'list' | 'next' | 'standup' | 'graph';
 
 function readHash(): { ref?: string; ws?: string; full: boolean } {
   const p = new URLSearchParams(location.hash.slice(1));

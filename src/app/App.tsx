@@ -11,6 +11,7 @@ import { Header } from '@/components/layout/header';
 import { ListView } from '@/components/list-view/list-view';
 import { NextView } from '@/components/next/next-view';
 import { StandupView } from '@/components/standup/standup-view';
+import { GraphView } from '@/components/graph/graph-view';
 import { TaskSheet, TicketPage } from '@/components/task/task-sheet';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { BoardProvider, useBoardContext } from './board-context';
@@ -53,7 +54,7 @@ function Shell() {
           <>
             <Header />
             <Notices />
-            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : <NextView />}</div>
+            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : <NextView />}</div>
           </>
         ) : <EmptyState />}
       </main>
