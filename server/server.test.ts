@@ -51,6 +51,14 @@ describe('local server', () => {
     expect(allLeaves(after).find((l) => l.key === 'epic-pricing-rules/2')?.state).toBe('review');
   });
 
+  test('history lists ticket commits with who made them', async () => {
+    const info = await probeLocalServer(base);
+    const log = await new LocalServerSource(info!, base).history('_bmad-output', 5);
+    expect(log[0]).toMatchObject({ subject: 'chore(tickets): mark epic-pricing-rules/2 in-review', changedBy: 'person:Dipak' });
+    expect(log[0]?.paths[0]).toEndWith('story-apply-and-refuse-discount-codes-plan.md');
+    expect(log.at(-1)?.subject).toBe('init');
+  });
+
   test('refuses paths outside the root, .git, and writes without the header', async () => {
     expect((await fetch(`${base}/api/read?path=../../etc/passwd`)).status).toBe(400);
     expect((await fetch(`${base}/api/read?path=.git/config`)).status).toBe(400);

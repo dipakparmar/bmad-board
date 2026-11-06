@@ -1,14 +1,16 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Link2 } from 'lucide-react';
+import { ListChecks, Link2 } from 'lucide-react';
 import { useBoardContext } from '@/app/board-context';
 import type { Ticket } from '@/app/view-model';
+import { awaitsPerson, planProgress } from '@/domain';
 import { cn } from '@/lib/cn';
 import { Assignee, HitlChip, ReadinessChip, RiskChip, taskChipClass, TypeChip } from './chips';
 
 export function TaskCardBody({ ticket, dragging = false }: { ticket: Ticket; dragging?: boolean }) {
   const { leaf } = ticket;
   const done = leaf.state === 'done';
+  const progress = planProgress(leaf.plan?.body);
   return (
     <div
       className={cn(
@@ -25,6 +27,8 @@ export function TaskCardBody({ ticket, dragging = false }: { ticket: Ticket; dra
       <div className={cn('mt-1 line-clamp-3 break-words text-[13px] leading-[18px]', done ? 'text-board-title-done' : 'font-medium text-board-title')}>{leaf.title}</div>
       {!done && (
         <div className="mt-2.5 flex flex-wrap items-center gap-1 empty:hidden">
+          {awaitsPerson(leaf) && <span className={cn(taskChipClass, 'border-warning/40 text-warning')} title="The build finished; a person marks it done">Your call</span>}
+          {progress && <span className={cn(taskChipClass, 'tabular-nums')} title="Build plan checklist"><ListChecks />{progress.done}/{progress.total}</span>}
           <ReadinessChip readiness={ticket.readiness} title={ticket.blockedReason ?? (ticket.waitingOn.length ? `Waits on ${ticket.waitingOn.join(', ')}` : undefined)} />
           <TypeChip leaf={leaf} />
           <RiskChip leaf={leaf} />

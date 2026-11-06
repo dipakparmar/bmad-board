@@ -15,7 +15,7 @@ export type View = 'board' | 'list' | 'next';
 function useBoardState() {
   const board = useBoard();
   const [scope, setScope] = useState<Scope>({});
-  const [view, setView] = useState<View>('board');
+  const [view, setView] = useState<View>('next');
   const [search, setSearch] = useState('');
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'github' | 'new-ticket' | 'search' | null>(null);

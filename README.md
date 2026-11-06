@@ -16,6 +16,13 @@ Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-s
 
 ## What you can do on the board
 
+- **What's next** (the default view) shows the AI-driven loop the way BMAD's agents see it:
+  - *Your call*: built work for you to check and mark done, and blocks only a person can answer.
+  - *Ready for an agent*: tickets whose prerequisites are met, in build order.
+  - *Needs refining*, *Agents working* (with their plan checklist), and *Waiting on other work*.
+  - Every ticket offers its next **hand-off**: a ready-to-paste prompt for the right BMAD skill (`bmad-build`, `bmad-build-auto`, `bmad-agent-po`, `bmad-code-review`).
+  - A **recent activity** feed lists the commits that touched the tickets, and marks which came from agents and which from people.
+
 - **Board and list views** of every initiative, epic and backlog ticket, in the Kaneo layout. Each card shows readiness the way BMAD's own `tickets.py next` reports it: ready, blocked (and on what), or needs refining.
 - **Drag a card between lanes** to set its status, or pick one in the ticket sheet. **Drag rows in the list** to change an epic's build order.
 - **Edit tickets.** You can change the description, risk, needs-a-person and assignee, and block or unblock a ticket with a reason.

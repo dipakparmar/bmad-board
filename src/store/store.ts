@@ -46,6 +46,10 @@ export class FileTicketStore implements TicketStore {
     return result;
   }
 
+  history(path: string, limit?: number) {
+    return this.source.history?.(path, limit) ?? Promise.resolve([]);
+  }
+
   watch(onChange: () => void): () => void {
     return this.source.watch?.(onChange) ?? (() => {});
   }

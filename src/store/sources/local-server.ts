@@ -1,6 +1,6 @@
 /** Talks to `server/index.ts`: reads files, writes them as one git commit, and streams change events. */
 import type { ChangeAuthor, ChangeResult, StoreCapabilities } from '../../domain';
-import type { FileEntry, FileSource, FileWrite } from '../file-source';
+import type { Activity, FileEntry, FileSource, FileWrite } from '../file-source';
 
 export interface ServerInfo {
   root: string;
@@ -52,6 +52,11 @@ export class LocalServerSource implements FileSource {
     });
     if (!res.ok) throw new Error(await errorOf(res));
     return (await res.json()) as ChangeResult;
+  }
+
+  async history(path: string, limit = 30): Promise<Activity[]> {
+    const res = await fetch(`${this.base}/api/log?path=${encodeURIComponent(path)}&limit=${limit}`, { cache: 'no-store' });
+    return res.ok ? ((await res.json()) as Activity[]) : [];
   }
 
   watch(onChange: () => void): () => void {

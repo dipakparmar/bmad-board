@@ -15,6 +15,23 @@ export interface FileWrite {
   text: string | null;
 }
 
+/** One commit that touched ticket files: what the agents and the board did, newest first. */
+export interface Activity {
+  sha: string;
+  date: string;
+  author: string;
+  subject: string;
+  /** From the `Changed-by:` trailer the board writes, e.g. `person:Dipak`. */
+  changedBy?: string;
+  paths: string[];
+  url?: string;
+}
+
+/** `Changed-by: person:Dipak via bmad-board` → `person:Dipak`. */
+export function changedByOf(body: string): string | undefined {
+  return /^Changed-by:\s*(\S+)/m.exec(body)?.[1];
+}
+
 export interface FileSource {
   readonly id: string;
   readonly label: string;
@@ -26,6 +43,8 @@ export interface FileSource {
   /** Writes the files as one unit: one commit locally, one commit on the PR branch on GitHub. */
   commit?(files: FileWrite[], message: string, author: ChangeAuthor): Promise<ChangeResult>;
   watch?(onChange: () => void): () => void;
+  /** Recent commits touching a path (a folder or file), newest first. */
+  history?(path: string, limit?: number): Promise<Activity[]>;
 }
 
 export function joinPath(...parts: string[]): string {

@@ -6,7 +6,10 @@ import { useBoardContext } from '@/app/board-context';
 import { refOf, type Ticket } from '@/app/view-model';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetPopup, SheetTitle } from '@/components/ui/sheet';
+import { Bot } from 'lucide-react';
 import { Assignee, ReadinessChip, StateIcon } from '../board/chips';
+import { ActivityList, useHistory } from '../next/activity-feed';
+import { copyHandoff, ticketHandoffs } from '../next/handoff-menu';
 import { Markdown } from './markdown';
 import { PropertiesRail } from './properties-rail';
 import { TaskDescription } from './task-description';
@@ -43,6 +46,35 @@ function Relations({ ticket }: { ticket: Ticket }) {
   );
 }
 
+function NextStep({ ticket }: { ticket: Ticket }) {
+  const all = ticketHandoffs(ticket);
+  if (all.length === 0) return null;
+  return (
+    <Section title="Next step">
+      <div className="flex flex-col gap-2">
+        {all.map((h) => (
+          <div key={h.label} className="flex items-start gap-3 rounded-lg border border-border p-3">
+            <Bot className="mt-0.5 size-4 shrink-0 text-info" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{h.label} <span className="font-normal text-xs text-muted-foreground">· {h.skill}</span></div>
+              <div className="text-xs text-muted-foreground">{h.why}</div>
+              <code className="mt-2 block whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 font-mono text-[11px]">{h.prompt}</code>
+            </div>
+            <Button size="xs" variant="outline" onClick={() => void copyHandoff(h)}><Copy />Copy</Button>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function TicketActivity({ ticket }: { ticket: Ticket }) {
+  const paths = [ticket.leaf.file?.path, ticket.leaf.plan?.path].filter((p): p is string => !!p);
+  const items = useHistory(ticket.workspaceId, paths, 15);
+  if (paths.length === 0) return null;
+  return <Section title="Activity">{items === null ? <p className="text-xs text-muted-foreground">Loading…</p> : <ActivityList items={items} empty="No commits for this ticket yet." />}</Section>;
+}
+
 export function TaskSheet() {
   const { selected, select } = useBoardContext();
   const t = selected;
@@ -71,6 +103,7 @@ export function TaskSheet() {
                 )}
                 <PropertiesRail ticket={t} className="-mx-5 mt-4 border-border border-y lg:hidden" />
                 <div className="mt-6"><TaskDescription ticket={t} /></div>
+                <NextStep ticket={t} />
                 <Relations ticket={t} />
                 {t.leaf.plan?.body.trim() && (
                   <Section title="Build plan">
@@ -78,6 +111,7 @@ export function TaskSheet() {
                     <Markdown source={t.leaf.plan.body} />
                   </Section>
                 )}
+                <TicketActivity ticket={t} />
                 <Section title="Files">
                   {[t.leaf.file?.path, t.leaf.plan?.path, t.leaf.folder === 'backlog' ? undefined : `${t.leaf.dir}/tickets.toml`].filter((p): p is string => !!p).map((p) => (
                     <div key={p} className="mb-1 flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">

@@ -44,7 +44,16 @@ A tracker's `tracker_status` wins over the plan's status when one is present.
 - Blocked: the plan says `blocked`, a prerequisite isn't met, or the entry has an open `unknown`.
 - Ready to refine: `refine = true` and not yet refined. Everything else that's open is ready to start.
 
-This drives the "What's next" view and the AI loop (step 4).
+This drives the "What's next" view.
+
+### The agent loop
+
+BMAD's agents run in the person's coding tool, not in the board. So the board's side of the loop is to show the state agents leave in git, and to hand work back to them (`src/domain/agent-loop.ts`):
+
+- `handoffs()` picks the next skill for a ticket from its readiness and status. A ready ticket goes to `bmad-build`, or to `bmad-build-auto` when no person is needed. An open question or missing criteria go to `bmad-agent-po`. Built or in-review work goes to `bmad-code-review` against the plan's `baseline_revision`. A blocked build gets a prompt to answer the block. The board copies the prompt; the person pastes it into Claude Code.
+- `awaitsPerson()` collects built and in-review work into "Your call", because agents stop at `built` and only a person marks done.
+- `planProgress()` reads the plan's checklist so cards show how far a build has got.
+- History comes from `git log` of the ticket files (`/api/log` locally, the commits API on GitHub). The board's own commits carry a `Changed-by:` trailer, which tells people's changes apart from agents'.
 
 ## 2. Mapping to Kaneo
 

@@ -92,6 +92,22 @@ async function commit(files: FileWrite[], message: string, author: Author) {
   return { paths, commit: done.ok ? (await git(['rev-parse', 'HEAD'])).out : undefined };
 }
 
+/** Recent commits touching a path, parsed from `git log`. */
+async function history(path: string, limit: number) {
+  if (!(await isRepo())) return [];
+  const rel = relative(root, inside(root, path)) || '.';
+  const log = await git(['log', `-n${Math.min(Math.max(limit, 1), 200)}`, '--format=%x1e%H%x1f%an%x1f%aI%x1f%s%x1f%b%x1f', '--name-only', '--', rel]);
+  if (!log.ok) return [];
+  return log.out.split('\x1e').filter(Boolean).map((chunk) => {
+    const [sha = '', author = '', date = '', subject = '', body = '', files = ''] = chunk.split('\x1f');
+    return {
+      sha, author, date, subject,
+      changedBy: /^Changed-by:\s*(\S+)/m.exec(body)?.[1],
+      paths: files.split('\n').map((f) => f.trim()).filter(Boolean),
+    };
+  });
+}
+
 /** Server-sent events: one `change` event (debounced) whenever a file under the root changes. */
 function events(): Response {
   let close = () => {};
@@ -170,6 +186,8 @@ const server = Bun.serve({
           const body = (await req.json()) as { files: FileWrite[]; message: string; author: Author };
           return json(await commit(body.files, body.message, body.author));
         }
+        case 'GET /api/log':
+          return json(await history(path, Number(url.searchParams.get('limit') ?? 30)));
         case 'GET /api/events':
           return events();
       }

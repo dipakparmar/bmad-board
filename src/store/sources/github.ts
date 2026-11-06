@@ -3,7 +3,7 @@
  * `bmad-board/…` branch with one pull request per editing session, so every board change gets reviewed.
  */
 import type { ChangeAuthor, ChangeResult, StoreCapabilities } from '../../domain';
-import { joinPath, type FileEntry, type FileSource, type FileWrite } from '../file-source';
+import { changedByOf, joinPath, type Activity, type FileEntry, type FileSource, type FileWrite } from '../file-source';
 
 export interface GitHubTarget {
   owner: string;
@@ -137,6 +137,17 @@ export class GitHubSource implements FileSource {
       this.pullRequestUrl = pr.html_url;
     }
     return { paths: files.map((f) => f.path), commit: commit.sha, pullRequestUrl: this.pullRequestUrl };
+  }
+
+  async history(path: string, limit = 30): Promise<Activity[]> {
+    await this.ensureTree();
+    const prefix = this.target.dir ? `${joinPath(this.target.dir)}/` : '';
+    type C = { sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } } };
+    const commits = await this.call<C[]>(this.repoPath(`/commits?sha=${encodeURIComponent(this.ref)}&path=${encodeURIComponent(prefix + joinPath(path))}&per_page=${limit}`));
+    return commits.map((c) => {
+      const [subject = '', ...rest] = c.commit.message.split('\n');
+      return { sha: c.sha, author: c.commit.author.name, date: c.commit.author.date, subject, changedBy: changedByOf(rest.join('\n')), paths: [], url: c.html_url };
+    });
   }
 
   private async ensureSessionBranch(): Promise<string> {
