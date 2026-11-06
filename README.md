@@ -2,7 +2,7 @@
 
 A board, list and ticket view for [BMAD-METHOD](https://github.com/bmad-code-org/bmad-method)'s ticket tree. Tickets stay where BMAD's agents keep them, as markdown and TOML in git. The board reads them, and when you move or edit a ticket it writes the same files and commits the change. It doesn't keep a database of its own.
 
-See [docs/domain-model.md](docs/domain-model.md) for the model and how it maps to Kaneo.
+New here? Start with [docs/getting-started.md](docs/getting-started.md). See [docs/domain-model.md](docs/domain-model.md) for the model and how it maps to Kaneo.
 
 ## Three ways to connect a project
 
