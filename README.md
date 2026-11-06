@@ -9,7 +9,7 @@ New here? Start with [docs/getting-started.md](docs/getting-started.md). See [do
 | | How | Writes |
 |---|---|---|
 | **Local checkout** | `bun run start -- --root ~/code/my-project` and open <http://127.0.0.1:33714> | each change is one commit on your current branch (never pushed) |
-| **GitHub repo** | "GitHub repo" in the header, `owner/name` plus an optional fine-grained token (Contents + Pull requests: write) | commits on a `bmad-board/…` branch, one pull request per session |
+| **GitHub repo** | "GitHub" in the sidebar, `owner/name`, then sign in with your local `gh` login (needs the local server; the token never reaches the browser) or a fine-grained token (Contents + Pull requests: write) | commits on a `bmad-board/…` branch, one pull request per session |
 | **Open folder** | "Open folder" in Chrome or Edge | read-only |
 
 Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-status.yaml`) open read-only. Run `bmad migrate method` to move them to the ticket tree.
@@ -29,6 +29,8 @@ Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-s
 - **Drag a card between lanes** to set its status, or pick one in the ticket sheet. **Drag rows in the list** to change an epic's build order.
 - **Edit tickets.** You can change the description, risk, needs-a-person and assignee, and block or unblock a ticket with a reason.
 - **Add tickets.** New stories and spikes go into an epic's `tickets.toml`. Bugs go into `backlog/`.
+- **Assign people and agents.** The assignee field suggests people from git history and GitHub contributors, plus anyone already assigned, and still takes any name. Git is scanned once per HEAD (the last 5,000 commits within a year, configurable with `BMAD_BOARD_PEOPLE_COMMITS` and `BMAD_BOARD_PEOPLE_DAYS`), and GitHub's list is cached for six hours.
+- **Open a ticket full screen** from its panel. The URL (`#ticket=1.2&full=1`) links straight to it.
 - **⌘K** jumps to any ticket. **Copy ref** puts `1.2`-style refs on your clipboard to hand to an agent ("build story 1.2").
 - Light and dark themes.
 

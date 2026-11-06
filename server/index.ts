@@ -56,7 +56,81 @@ async function info() {
     name: root.split(sep).pop(),
     git: repo,
     branch: repo ? (await git(['rev-parse', '--abbrev-ref', 'HEAD'])).out : null,
+    user: repo ? (await git(['config', 'user.name'])).out || null : null,
   };
+}
+
+/**
+ * Who works on the project, from git. Scans at most PEOPLE_COMMITS commits from the last PEOPLE_DAYS
+ * days, so a huge history costs one bounded `git log`, and caches the answer until HEAD moves.
+ */
+const PEOPLE_COMMITS = Number(process.env.BMAD_BOARD_PEOPLE_COMMITS ?? 5000);
+const PEOPLE_DAYS = Number(process.env.BMAD_BOARD_PEOPLE_DAYS ?? 365);
+let peopleCache: { head: string; lines: { name: string; email: string; date: string; changedBy?: string }[] } | null = null;
+
+async function people() {
+  if (!(await isRepo())) return { lines: [], window: null };
+  const head = (await git(['rev-parse', 'HEAD'])).out;
+  if (peopleCache?.head !== head) {
+    const log = await git(['log', `-n${PEOPLE_COMMITS}`, `--since=${PEOPLE_DAYS}.days`, '--format=%an%x1f%ae%x1f%aI%x1f%(trailers:key=Changed-by,valueonly,separator=%x2C)%x1e']);
+    const lines = log.ok
+      ? log.out.split('\x1e').map((l) => l.trim()).filter(Boolean).map((l) => {
+          const [name = '', email = '', date = '', changedBy = ''] = l.split('\x1f');
+          return { name, email, date, changedBy: changedBy.trim() || undefined };
+        })
+      : [];
+    peopleCache = { head, lines };
+  }
+  return { lines: peopleCache.lines, window: { commits: PEOPLE_COMMITS, days: PEOPLE_DAYS } };
+}
+
+/**
+ * GitHub through the user's own `gh` login: the server asks `gh auth token` for the token and forwards
+ * API calls with it, so the browser never sees or stores the token. Re-reads it once on a 401.
+ */
+const GITHUB_API = process.env.BMAD_BOARD_GITHUB_API ?? 'https://api.github.com';
+let ghToken: string | null | undefined;
+
+async function readGhToken(fresh = false): Promise<string | null> {
+  if (ghToken !== undefined && !fresh) return ghToken;
+  try {
+    const proc = Bun.spawn(['gh', 'auth', 'token'], { stdout: 'pipe', stderr: 'pipe' });
+    const out = (await new Response(proc.stdout).text()).trim();
+    ghToken = (await proc.exited) === 0 && out ? out : null;
+  } catch {
+    ghToken = null; // gh is not installed
+  }
+  return ghToken;
+}
+
+async function ghStatus() {
+  const token = await readGhToken(true);
+  if (!token) return { available: false };
+  const res = await fetch(`${GITHUB_API}/user`, { headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' } });
+  if (!res.ok) return { available: false, error: `GitHub said ${res.status} for the gh token` };
+  const user = (await res.json()) as { login: string };
+  return { available: true, login: user.login };
+}
+
+async function ghProxy(req: Request, url: URL): Promise<Response> {
+  const rest = url.pathname.slice('/api/gh'.length) || '/';
+  if (!rest.startsWith('/') || rest.includes('..')) throw new HttpError(400, 'bad GitHub path');
+  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
+  const send = async (token: string) => fetch(`${GITHUB_API}${rest}${url.search}`, {
+    method: req.method,
+    body,
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: req.headers.get('accept') ?? 'application/vnd.github+json',
+      'x-github-api-version': '2022-11-28',
+      ...(body ? { 'content-type': 'application/json' } : {}),
+    },
+  });
+  let token = await readGhToken();
+  if (!token) throw new HttpError(401, 'no GitHub CLI login on this machine; run `gh auth login`');
+  let res = await send(token);
+  if (res.status === 401 && (token = await readGhToken(true))) res = await send(token);
+  return new Response(res.body, { status: res.status, headers: { 'content-type': res.headers.get('content-type') ?? 'application/json', 'cache-control': 'no-store' } });
 }
 
 async function list(path: string) {
@@ -165,7 +239,10 @@ const server = Bun.serve({
     try {
       // Blocks DNS rebinding: only our own host names may talk to the API.
       if (url.pathname.startsWith('/api/') && !ALLOWED_HOSTS.has(req.headers.get('host') ?? '')) throw new HttpError(403, 'unexpected host');
-      if (req.method === 'POST' && req.headers.get('x-bmad-board') !== '1') throw new HttpError(403, 'missing x-bmad-board header');
+      // Writes, and anything that spends the gh token, need the header a cross-site page cannot send without CORS.
+      if ((req.method !== 'GET' || url.pathname.startsWith('/api/gh')) && url.pathname.startsWith('/api/') && req.headers.get('x-bmad-board') !== '1') throw new HttpError(403, 'missing x-bmad-board header');
+      if (url.pathname === '/api/gh-status') return json(await ghStatus());
+      if (url.pathname.startsWith('/api/gh/')) return await ghProxy(req, url);
       const path = url.searchParams.get('path') ?? '';
       switch (`${req.method} ${url.pathname}`) {
         case 'GET /api/info':
@@ -188,6 +265,8 @@ const server = Bun.serve({
         }
         case 'GET /api/log':
           return json(await history(path, Number(url.searchParams.get('limit') ?? 30)));
+        case 'GET /api/people':
+          return json(await people());
         case 'GET /api/events':
           return events();
       }

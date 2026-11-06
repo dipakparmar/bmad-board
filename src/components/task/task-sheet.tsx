@@ -1,5 +1,6 @@
 /** The ticket sheet, laid out like Kaneo's task-details-sheet: content on the left, properties rail on the right. */
-import { ArrowUpRight, Copy, FileText, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Copy, FileText, Link2, Maximize2, Minimize2, X } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { useBoardContext } from '@/app/board-context';
@@ -75,56 +76,94 @@ function TicketActivity({ ticket }: { ticket: Ticket }) {
   return <Section title="Activity">{items === null ? <p className="text-xs text-muted-foreground">Loading…</p> : <ActivityList items={items} empty="No commits for this ticket yet." />}</Section>;
 }
 
+/** The ticket itself: content plus the properties rail. Used by the sheet and the full-page view. */
+export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boolean }) {
+  const { tickets } = useBoardContext();
+  const peers = tickets.filter((x) => x.workspaceId === t.workspaceId);
+  return (
+    <div key={t.uid} className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+      <div className={cn('min-w-0 flex-1 px-5 pt-5 pb-10 lg:overflow-y-auto lg:px-9 lg:pt-7', full && 'lg:px-16 lg:pt-10')}>
+        <div className={cn(full && 'mx-auto max-w-3xl')}>
+          <div className="mb-2 flex items-center gap-2">
+            <ReadinessChip readiness={t.readiness} />
+            {t.leaf.drift && <span className="text-xs text-warning">The story file and tickets.toml disagree on {Object.keys(t.leaf.drift).join(' and ')}</span>}
+          </div>
+          <TicketTitle full={full} className={cn('font-semibold', full ? 'text-2xl leading-8' : 'text-xl leading-7')}>{t.leaf.title}</TicketTitle>
+          {t.readiness === 'blocked' && (t.blockedReason || t.waitingOn.length > 0) && (
+            <p className="mt-2 text-sm text-destructive">{t.blockedReason ?? `Waiting on ${t.waitingOn.map((k) => refOf(k, peers)).join(', ')}`}</p>
+          )}
+          <PropertiesRail ticket={t} className="-mx-5 mt-4 border-border border-y lg:hidden" />
+          <div className="mt-6"><TaskDescription ticket={t} /></div>
+          <NextStep ticket={t} />
+          <Relations ticket={t} />
+          {t.leaf.plan?.body.trim() && (
+            <Section title="Build plan">
+              <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Assignee name={t.leaf.plan.assignee} />{t.leaf.plan.assignee ?? 'No assignee'} · {t.leaf.plan.path.split('/').pop()}</div>
+              <Markdown source={t.leaf.plan.body} />
+            </Section>
+          )}
+          <TicketActivity ticket={t} />
+          <Section title="Files">
+            {[t.leaf.file?.path, t.leaf.plan?.path, t.leaf.folder === 'backlog' ? undefined : `${t.leaf.dir}/tickets.toml`].filter((p): p is string => !!p).map((p) => (
+              <div key={p} className="mb-1 flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span><ArrowUpRight className="ml-auto size-3 shrink-0" />
+              </div>
+            ))}
+          </Section>
+        </div>
+      </div>
+      <PropertiesRail ticket={t} className="hidden w-80 shrink-0 overflow-y-auto border-border border-l lg:flex" />
+    </div>
+  );
+}
+
+/** The sheet's title must be a SheetTitle for accessibility; the full page uses a plain heading. */
+function TicketTitle({ full, className, children }: { full?: boolean; className?: string; children: ReactNode }) {
+  return full ? <h1 className={className}>{children}</h1> : <SheetTitle className={className}>{children}</SheetTitle>;
+}
+
+export function TicketHeader({ ticket: t, full }: { ticket: Ticket; full?: boolean }) {
+  const { select, setExpanded } = useBoardContext();
+  return (
+    <header className="flex h-12 shrink-0 items-center gap-2 border-border border-b px-4">
+      {full && <Button size="sm" variant="ghost" onClick={() => setExpanded(false)}><ArrowLeft />Back</Button>}
+      <span className="font-mono text-xs text-muted-foreground">{t.ref}</span>
+      <span className="min-w-0 truncate text-xs text-muted-foreground">· {t.workspace}{full ? ` · ${t.epic?.title ?? (t.leaf.folder === 'backlog' ? 'Backlog' : t.initiative?.title ?? '')}` : ''}</span>
+      <div className="ml-auto flex items-center gap-1">
+        <Button size="icon-sm" variant="ghost" aria-label="Copy link" title="Copy link to this ticket" onClick={() => { void navigator.clipboard?.writeText(location.href); toast.success('Link copied'); }}><Link2 /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Copy BMAD ref" title="Copy BMAD ref" onClick={() => { void navigator.clipboard?.writeText(t.ref); toast.success(`Copied ${t.ref}`, { description: `Hand it to an agent, for example "build story ${t.ref}".` }); }}><Copy /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label={full ? 'Open as panel' : 'Open full screen'} title={full ? 'Open as panel' : 'Open full screen'} onClick={() => setExpanded(!full)}>{full ? <Minimize2 /> : <Maximize2 />}</Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={() => select(null)}><X /></Button>
+      </div>
+    </header>
+  );
+}
+
 export function TaskSheet() {
-  const { selected, select } = useBoardContext();
-  const t = selected;
+  const { selected, select, expanded } = useBoardContext();
+  const t = expanded ? null : selected;
   return (
     <Sheet open={!!t} onOpenChange={(open) => !open && select(null)}>
       <SheetPopup side="right" showCloseButton={false} className="w-full max-w-full gap-0 p-0 sm:max-w-lg md:max-w-2xl lg:max-w-4xl">
         {t && (
           <>
-            <header className="flex h-12 shrink-0 items-center gap-2 border-border border-b px-4">
-              <span className="font-mono text-xs text-muted-foreground">{t.ref}</span>
-              <span className="text-xs text-muted-foreground">· {t.workspace}</span>
-              <div className="ml-auto flex items-center gap-1">
-                <Button size="icon-sm" variant="ghost" aria-label="Copy BMAD ref" onClick={() => { void navigator.clipboard?.writeText(t.ref); toast.success(`Copied ${t.ref}`, { description: `Hand it to an agent, for example "build story ${t.ref}".` }); }}><Copy /></Button>
-                <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={() => select(null)}><X /></Button>
-              </div>
-            </header>
-            <div key={t.uid} className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
-              <div className="min-w-0 flex-1 px-5 pt-5 pb-10 lg:overflow-y-auto lg:px-9 lg:pt-7">
-                <div className="mb-2 flex items-center gap-2">
-                  <ReadinessChip readiness={t.readiness} />
-                  {t.leaf.drift && <span className="text-xs text-warning">The story file and tickets.toml disagree on {Object.keys(t.leaf.drift).join(' and ')}</span>}
-                </div>
-                <SheetTitle className="text-xl font-semibold leading-7">{t.leaf.title}</SheetTitle>
-                {t.readiness === 'blocked' && (t.blockedReason || t.waitingOn.length > 0) && (
-                  <p className="mt-2 text-sm text-destructive">{t.blockedReason ?? `Waiting on ${t.waitingOn.map((k) => refOf(k, [])).join(', ')}`}</p>
-                )}
-                <PropertiesRail ticket={t} className="-mx-5 mt-4 border-border border-y lg:hidden" />
-                <div className="mt-6"><TaskDescription ticket={t} /></div>
-                <NextStep ticket={t} />
-                <Relations ticket={t} />
-                {t.leaf.plan?.body.trim() && (
-                  <Section title="Build plan">
-                    <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Assignee name={t.leaf.plan.assignee} />{t.leaf.plan.assignee ?? 'No assignee'} · {t.leaf.plan.path.split('/').pop()}</div>
-                    <Markdown source={t.leaf.plan.body} />
-                  </Section>
-                )}
-                <TicketActivity ticket={t} />
-                <Section title="Files">
-                  {[t.leaf.file?.path, t.leaf.plan?.path, t.leaf.folder === 'backlog' ? undefined : `${t.leaf.dir}/tickets.toml`].filter((p): p is string => !!p).map((p) => (
-                    <div key={p} className="mb-1 flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                      <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span><ArrowUpRight className="ml-auto size-3 shrink-0" />
-                    </div>
-                  ))}
-                </Section>
-              </div>
-              <PropertiesRail ticket={t} className="hidden w-80 shrink-0 overflow-y-auto border-border border-l lg:flex" />
-            </div>
+            <TicketHeader ticket={t} />
+            <TicketDetail ticket={t} />
           </>
         )}
       </SheetPopup>
     </Sheet>
+  );
+}
+
+/** Full-page ticket, in place of the board views. */
+export function TicketPage() {
+  const { selected } = useBoardContext();
+  if (!selected) return null;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <TicketHeader ticket={selected} full />
+      <TicketDetail ticket={selected} full />
+    </div>
   );
 }

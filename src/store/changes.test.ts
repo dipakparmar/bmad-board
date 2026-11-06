@@ -37,6 +37,26 @@ describe('FileTicketStore.apply', () => {
     expect(allLeaves(tree).find((l) => l.key === 'epic-pricing-rules/2')?.status).toBe('blocked');
   });
 
+  test('assign changes only the assignee and keeps a block', async () => {
+    const { src, store } = await setup();
+    await store.apply([{ kind: 'mark', key: 'epic-pricing-rules/2', status: 'blocked', blockedReason: 'needs PSP keys' }], person);
+    await store.load();
+    await store.apply([{ kind: 'assign', key: 'epic-pricing-rules/2', assignee: 'Priya' }], person);
+    const { data } = parseFrontmatter((await src.read(`${PRICING}/story-apply-and-refuse-discount-codes-plan.md`)) ?? '');
+    expect(data).toMatchObject({ status: 'blocked', assignee: 'Priya', blocked_reason: 'needs PSP keys' });
+    expect(src.commits.at(-1)?.message).toStartWith('chore(tickets): assign epic-pricing-rules/2 to Priya');
+    await store.load();
+    await store.apply([{ kind: 'assign', key: 'epic-pricing-rules/2', assignee: '' }], person);
+    expect(parseFrontmatter((await src.read(`${PRICING}/story-apply-and-refuse-discount-codes-plan.md`)) ?? '').data.assignee).toBeUndefined();
+  });
+
+  test('assigning an unplanned ticket does not claim a build started', async () => {
+    const { src, store } = await setup();
+    await store.apply([{ kind: 'assign', key: 'epic-pricing-rules/3', assignee: 'Priya' }], person);
+    const { data } = parseFrontmatter((await src.read(`${PRICING}/spike-pick-a-tax-provider-plan.md`)) ?? '');
+    expect(data).toEqual({ title: 'Pick a tax provider', ticket: 3, assignee: 'Priya' });
+  });
+
   test('clear-block removes the block fields', async () => {
     const { src, store } = await setup();
     await store.apply([{ kind: 'mark', key: 'epic-pricing-rules/2', status: 'blocked', blockedReason: 'x' }], person);

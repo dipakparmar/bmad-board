@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/cn';
 import { STATUS_HELP, StateIcon } from '../board/chips';
+import { AssigneePicker } from './assignee-picker';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -23,7 +24,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 export function PropertiesRail({ ticket, className }: { ticket: Ticket; className?: string }) {
   const state = useBoardContext();
   const { leaf } = ticket;
-  const [assignee, setAssignee] = useState(leaf.plan?.assignee ?? '');
   const [reason, setReason] = useState('');
   const ro = ticket.readOnly;
   const hasEntry = leaf.id !== null && leaf.folder !== 'backlog';
@@ -51,14 +51,10 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
       </Row>
       <Row label="Assignee">
         {ro ? (leaf.plan?.assignee ?? 'Unassigned') : (
-          <Input
-            size="sm"
-            value={assignee}
-            placeholder="Person or agent"
-            onChange={(e) => setAssignee(e.target.value)}
-            onBlur={() => {
-              if (assignee !== (leaf.plan?.assignee ?? '')) void edit({ kind: 'mark', key: leaf.key, status: leaf.status || 'draft', assignee }, assignee ? `${ticket.ref} assigned to ${assignee}` : `${ticket.ref} unassigned`);
-            }}
+          <AssigneePicker
+            workspaceId={ticket.workspaceId}
+            value={leaf.plan?.assignee ?? ''}
+            onCommit={(a) => void edit({ kind: 'assign', key: leaf.key, assignee: a }, a ? `${ticket.ref} assigned to ${a}` : `${ticket.ref} unassigned`)}
           />
         )}
       </Row>

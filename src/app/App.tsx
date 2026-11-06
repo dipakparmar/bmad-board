@@ -1,4 +1,5 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
+import { useState } from 'react';
 import { Toaster } from 'sonner';
 import { KanbanBoard } from '@/components/board/kanban-board';
 import { GitHubDialog } from '@/components/dialogs/github-dialog';
@@ -10,21 +11,26 @@ import { Header } from '@/components/layout/header';
 import { ListView } from '@/components/list-view/list-view';
 import { NextView } from '@/components/next/next-view';
 import { StandupView } from '@/components/standup/standup-view';
-import { TaskSheet } from '@/components/task/task-sheet';
+import { TaskSheet, TicketPage } from '@/components/task/task-sheet';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { BoardProvider, useBoardContext } from './board-context';
 
 function Notices() {
   const { board } = useBoardContext();
+  const [hidden, setHidden] = useState<string[]>([]);
   const v6 = board.workspaces.filter((w) => w.tree?.layout === 'v6');
   const problems = board.workspaces.flatMap((w) => (w.tree?.problems ?? []).map((p) => `${w.store.label}: ${p}`));
   if (!v6.length && !problems.length) return null;
   return (
     <div className="flex flex-col gap-2 px-5 pt-3">
       {v6.map((w) => (
-        <div key={w.store.id} className="rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-xs">
-          <strong>{w.store.label}</strong> uses the BMAD v6 layout, so it is read-only here. Run <code>bmad migrate method</code> to move it to the ticket tree.
-        </div>
+        hidden.includes(w.store.id) ? null : (
+          <div key={w.store.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-1.5 text-xs" title={`${w.store.label} uses the BMAD v6 layout`}>
+            <AlertTriangle className="size-3.5 shrink-0 text-warning" />
+            <span className="min-w-0 truncate"><strong className="font-medium">v6 layout, read-only.</strong> Run <code>bmad migrate method</code> in <span className="font-mono">{w.store.label}</span> to edit tickets here.</span>
+            <button type="button" aria-label="Dismiss" className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground hover:bg-warning/15" onClick={() => setHidden((h) => [...h, w.store.id])}><X className="size-3.5" /></button>
+          </div>
+        )
       ))}
       {problems.length > 0 && (
         <details className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
@@ -37,13 +43,13 @@ function Notices() {
 }
 
 function Shell() {
-  const { board, view } = useBoardContext();
+  const { board, view, expanded, selected } = useBoardContext();
   const connected = board.workspaces.length > 0;
   return (
     <div className="flex h-dvh bg-sidebar">
       <AppSidebar />
       <main className="my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs">
-        {connected ? (
+        {connected && expanded && selected ? <TicketPage /> : connected ? (
           <>
             <Header />
             <Notices />

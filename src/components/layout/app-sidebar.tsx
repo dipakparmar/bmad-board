@@ -1,13 +1,13 @@
 /** Projects → initiatives → epics, like Kaneo's workspace/project sidebar. */
-import { FolderOpen, Github, Inbox, KanbanSquare, Layers, LogOut, RefreshCw, Server, Target } from 'lucide-react';
-import { useState } from 'react';
+import { FolderOpen, GitBranch, Github, Inbox, KanbanSquare, Layers, LogOut, RefreshCw, Server, Target } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useBoardContext, type Scope } from '@/app/board-context';
 import { loadAuthor, saveAuthor, type Workspace } from '@/app/use-board';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
-import { BrowserFolderSource } from '@/store';
+import { BrowserFolderSource, LocalServerSource } from '@/store';
 import { cn } from '@/lib/cn';
 
 function sourceIcon(w: Workspace) {
@@ -31,6 +31,38 @@ function NavItem({ active, onClick, icon: Icon, label, count, indent = 0 }: { ac
   );
 }
 
+/** "name · branch" labels split in two, so long names truncate on their own line instead of pushing the layout. */
+function splitLabel(label: string): { name: string; branch?: string } {
+  const i = label.lastIndexOf(' · ');
+  return i < 0 ? { name: label } : { name: label.slice(0, i), branch: label.slice(i + 3) };
+}
+
+function WorkspaceHeader({ w, onSelect, onReload, onRemove }: { w: Workspace; onSelect: () => void; onReload: () => void; onRemove: () => void }) {
+  const Icon = sourceIcon(w);
+  const { name, branch } = splitLabel(w.store.label);
+  const v6 = w.tree?.layout === 'v6';
+  const mode = v6 ? 'v6' : w.store.capabilities.pullRequests ? 'PR' : w.store.capabilities.write ? 'git' : 'read';
+  const modeHelp = v6 ? 'BMAD v6 layout: read-only until you run `bmad migrate method`' : mode === 'PR' ? 'Changes go to a pull request' : mode === 'git' ? 'Changes are committed on this branch' : 'Read-only';
+  return (
+    <div className="group flex min-w-0 items-start gap-2 px-2 py-1">
+      <Icon className="mt-0.5 size-3.5 shrink-0 text-sidebar-foreground/60" />
+      <button type="button" title={w.store.label} className="flex min-w-0 flex-1 flex-col text-left" onClick={onSelect}>
+        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/70 hover:text-sidebar-foreground">{name}</span>
+        {branch && <span className="flex min-w-0 items-center gap-1 text-[11px] text-sidebar-foreground/50"><GitBranch className="size-3 shrink-0" /><span className="truncate">{branch}</span></span>}
+      </button>
+      <span title={modeHelp} className={cn('shrink-0 rounded px-1 py-px text-[10px]', v6 ? 'bg-warning/15 text-warning-foreground' : 'bg-sidebar-accent')}>{mode}</span>
+      <Menu>
+        <MenuTrigger render={<button type="button" aria-label={`${w.store.label} options`} className="shrink-0 rounded px-1 text-[11px] opacity-0 hover:bg-sidebar-accent group-hover:opacity-100 focus-visible:opacity-100">···</button>} />
+        <MenuPopup align="end">
+          <MenuItem onClick={onReload}><RefreshCw />Reload</MenuItem>
+          <MenuSeparator />
+          <MenuItem onClick={onRemove}><LogOut />Disconnect</MenuItem>
+        </MenuPopup>
+      </Menu>
+    </div>
+  );
+}
+
 export async function openFolder(add: (s: BrowserFolderSource) => Promise<void>) {
   if (!BrowserFolderSource.supported()) {
     toast.error('This browser cannot open local folders', { description: 'Use Chrome or Edge, or run `bun run start -- --root <project>` to edit with git.' });
@@ -47,6 +79,17 @@ export function AppSidebar() {
   const state = useBoardContext();
   const { board, scope, setScope, tickets } = state;
   const [name, setName] = useState(() => (loadAuthor().name === 'board user' ? '' : loadAuthor().name));
+  // Default "your name" to the project's `git config user.name`, the way a commit would sign it.
+  const gitUser = board.workspaces.map((w) => w.store.source).find((src): src is LocalServerSource => src instanceof LocalServerSource && !!src.info.user)?.info.user;
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !gitUser) return;
+    prefilled.current = true;
+    if (!name) {
+      setName(gitUser);
+      saveAuthor(gitUser);
+    }
+  }, [gitUser, name]);
   const is = (s: Scope) => scope.workspaceId === s.workspaceId && scope.initiative === s.initiative && scope.epic === s.epic;
   const count = (f: (t: (typeof tickets)[number]) => boolean) => {
     const mine = tickets.filter(f);
@@ -62,22 +105,9 @@ export function AppSidebar() {
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">
         <NavItem active={is({})} onClick={() => setScope({})} icon={Layers} label="All tickets" count={tickets.length ? count(() => true) : undefined} />
         {board.workspaces.map((w) => {
-          const Icon = sourceIcon(w);
           return (
             <div key={w.store.id} className="mt-4">
-              <div className="group flex h-7 items-center gap-2 px-2 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/60">
-                <Icon className="size-3.5" />
-                <button type="button" className="truncate hover:text-sidebar-foreground" onClick={() => setScope({ workspaceId: w.store.id })}>{w.store.label}</button>
-                <span className="ml-auto rounded bg-sidebar-accent px-1 py-px text-[10px] normal-case tracking-normal">{w.tree?.layout === 'v6' ? 'v6 · read-only' : w.store.capabilities.pullRequests ? 'PR' : w.store.capabilities.write ? 'git' : 'read-only'}</span>
-                <Menu>
-                  <MenuTrigger render={<button type="button" aria-label={`${w.store.label} options`} className="rounded px-1 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100 focus-visible:opacity-100">···</button>} />
-                  <MenuPopup align="end">
-                    <MenuItem onClick={() => void board.reload(w.store)}><RefreshCw />Reload</MenuItem>
-                    <MenuSeparator />
-                    <MenuItem onClick={() => { board.remove(w.store.id); setScope({}); }}><LogOut />Disconnect</MenuItem>
-                  </MenuPopup>
-                </Menu>
-              </div>
+              <WorkspaceHeader w={w} onSelect={() => setScope({ workspaceId: w.store.id })} onReload={() => void board.reload(w.store)} onRemove={() => { board.remove(w.store.id); setScope({}); }} />
               {w.loading && !w.tree && <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Loading…</div>}
               {w.error && <div className="px-3 py-1 text-xs text-destructive">{w.error}</div>}
               {w.tree?.initiatives.map((i) => (

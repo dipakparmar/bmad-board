@@ -13,6 +13,7 @@ function describe(c: TicketChange): string {
   switch (c.kind) {
     case 'mark': return `mark ${c.key} ${c.status}`;
     case 'clear-block': return `unblock ${c.key}`;
+    case 'assign': return c.assignee ? `assign ${c.key} to ${c.assignee}` : `unassign ${c.key}`;
     case 'edit-entry': return `edit ${c.key}`;
     case 'add-entry': return `add "${c.entry.title}" to ${c.folder}`;
     case 'reorder': return `reorder ${c.folder}`;
@@ -48,6 +49,10 @@ export class FileTicketStore implements TicketStore {
 
   history(path: string, limit?: number) {
     return this.source.history?.(path, limit) ?? Promise.resolve([]);
+  }
+
+  people() {
+    return this.source.people?.() ?? Promise.resolve([]);
   }
 
   watch(onChange: () => void): () => void {

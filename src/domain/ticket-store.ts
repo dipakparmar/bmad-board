@@ -29,6 +29,8 @@ export interface ChangeAuthor {
 export type TicketChange =
   | { kind: 'mark'; key: TicketKey; status: LeafStatus; assignee?: string; blockedReason?: string }
   | { kind: 'clear-block'; key: TicketKey }
+  /** Sets or clears only the assignee; status and any block stay as they are. */
+  | { kind: 'assign'; key: TicketKey; assignee: string }
   | { kind: 'edit-entry'; key: TicketKey; patch: Partial<Omit<BreakdownEntry, 'id'>> }
   | { kind: 'add-entry'; folder: string; entry: Omit<BreakdownEntry, 'id'> }
   | { kind: 'reorder'; folder: string; order: (number | string)[] }

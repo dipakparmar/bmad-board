@@ -33,6 +33,7 @@ export function saveAuthor(name: string) {
 
 export function useBoard() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [serverAvailable, setServerAvailable] = useState(false);
   const unwatch = useRef(new Map<string, () => void>());
 
   const patch = useCallback((id: string, update: Partial<Workspace>) => {
@@ -81,7 +82,10 @@ export function useBoard() {
   useEffect(() => {
     let cancelled = false;
     void probeLocalServer().then((info) => {
-      if (info && !cancelled) void add(new LocalServerSource(info));
+      if (info && !cancelled) {
+        setServerAvailable(true);
+        void add(new LocalServerSource(info));
+      }
     });
     const subscriptions = unwatch.current;
     return () => {
@@ -90,5 +94,5 @@ export function useBoard() {
     };
   }, [add]);
 
-  return { workspaces, add, remove, reload, apply, patch };
+  return { workspaces, add, remove, reload, apply, patch, serverAvailable };
 }

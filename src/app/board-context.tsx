@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useBoard } from './use-board';
 import { ticketsOf, type Ticket } from './view-model';
 
@@ -11,6 +11,11 @@ export interface Scope {
 }
 
 export type View = 'board' | 'list' | 'next' | 'standup';
+
+function readHash(): { ref?: string; ws?: string; full: boolean } {
+  const p = new URLSearchParams(location.hash.slice(1));
+  return { ref: p.get('ticket') ?? undefined, ws: p.get('ws') ?? undefined, full: p.get('full') === '1' };
+}
 
 function useBoardState() {
   const board = useBoard();
@@ -35,8 +40,32 @@ function useBoardState() {
     );
   }, [tickets, scope, search]);
   const selected: Ticket | null = tickets.find((t) => t.uid === selectedUid) ?? null;
+  const [expanded, setExpanded] = useState(false);
 
-  return { board, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select: setSelectedUid, dialog, setDialog };
+  // The open ticket lives in the URL (#ticket=<ref>&full=1) so a full-page ticket can be linked and survives reloads.
+  const [pendingRef, setPendingRef] = useState(() => readHash());
+  useEffect(() => {
+    if (!pendingRef.ref || tickets.length === 0) return;
+    const hit = tickets.find((t) => t.ref === pendingRef.ref && (!pendingRef.ws || t.workspace === pendingRef.ws)) ?? tickets.find((t) => t.ref === pendingRef.ref);
+    if (hit) {
+      setSelectedUid(hit.uid);
+      setExpanded(pendingRef.full);
+    }
+    setPendingRef({ full: false });
+  }, [tickets, pendingRef]);
+  useEffect(() => {
+    if (pendingRef.ref) return;
+    const ws = selected && board.workspaces.length > 1 ? `&ws=${encodeURIComponent(selected.workspace)}` : '';
+    const hash = selected ? `#ticket=${encodeURIComponent(selected.ref)}${ws}${expanded ? '&full=1' : ''}` : '';
+    if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
+  }, [selected, expanded, pendingRef, board.workspaces.length]);
+
+  const select = (uid: string | null) => {
+    setSelectedUid(uid);
+    if (!uid) setExpanded(false);
+  };
+
+  return { board, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
 }
 
 export type BoardState = ReturnType<typeof useBoardState>;

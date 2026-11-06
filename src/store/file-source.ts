@@ -1,3 +1,4 @@
+import type { Member } from '../domain';
 /**
  * Where bytes come from. Paths are POSIX-style and relative to the project root (the folder holding `_bmad/`).
  * Each TicketStore adapter is a FileSource plus the shared tree loader and change planner.
@@ -45,6 +46,8 @@ export interface FileSource {
   watch?(onChange: () => void): () => void;
   /** Recent commits touching a path (a folder or file), newest first. */
   history?(path: string, limit?: number): Promise<Activity[]>;
+  /** People and agents who work on the project, from git or the host. Bounded and cached by the source. */
+  people?(): Promise<Member[]>;
 }
 
 export function joinPath(...parts: string[]): string {

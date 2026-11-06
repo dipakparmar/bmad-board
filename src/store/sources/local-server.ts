@@ -1,5 +1,5 @@
 /** Talks to `server/index.ts`: reads files, writes them as one git commit, and streams change events. */
-import type { ChangeAuthor, ChangeResult, StoreCapabilities } from '../../domain';
+import { membersFromGitLog, type ChangeAuthor, type ChangeResult, type Member, type StoreCapabilities } from '../../domain';
 import type { Activity, FileEntry, FileSource, FileWrite } from '../file-source';
 
 export interface ServerInfo {
@@ -7,6 +7,8 @@ export interface ServerInfo {
   name: string;
   git: boolean;
   branch: string | null;
+  /** `git config user.name` in the project, to prefill "your name". */
+  user?: string | null;
 }
 
 export async function probeLocalServer(base = ''): Promise<ServerInfo | null> {
@@ -16,6 +18,16 @@ export async function probeLocalServer(base = ''): Promise<ServerInfo | null> {
     return (await res.json()) as ServerInfo;
   } catch {
     return null;
+  }
+}
+
+/** Whether the local server can reach GitHub with this machine's `gh` login, and as whom. */
+export async function ghCliStatus(base = ''): Promise<{ available: boolean; login?: string; error?: string }> {
+  try {
+    const res = await fetch(`${base}/api/gh-status`, { headers: { 'x-bmad-board': '1' }, cache: 'no-store' });
+    return res.ok ? await res.json() : { available: false };
+  } catch {
+    return { available: false };
   }
 }
 
@@ -52,6 +64,13 @@ export class LocalServerSource implements FileSource {
     });
     if (!res.ok) throw new Error(await errorOf(res));
     return (await res.json()) as ChangeResult;
+  }
+
+  async people(): Promise<Member[]> {
+    const res = await fetch(`${this.base}/api/people`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const { lines } = (await res.json()) as { lines: Parameters<typeof membersFromGitLog>[0] };
+    return membersFromGitLog(lines);
   }
 
   async history(path: string, limit = 30): Promise<Activity[]> {

@@ -81,6 +81,20 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
         }
         break;
       }
+      case 'assign': {
+        if (tree.tracker !== 'repo') throw new ChangeError(`Tickets are tracked in ${tree.tracker}; assign them there.`);
+        const leaf = leafOf(change.key);
+        const path = planPath(leaf, tree);
+        const existing = await read(path);
+        const assignee = change.assignee.trim() || undefined;
+        if (existing !== null) write(path, setFrontmatter(existing, { assignee }));
+        else if (assignee) {
+          const ticket = leaf.id ?? leaf.key.slice(leaf.key.indexOf('/') + 1).replace(/\.md$/, '');
+          // No status: an empty one reads as "not started", where `draft` would claim a build began.
+          write(path, setFrontmatter('', { title: leaf.title, ticket, ...(leaf.status ? { status: leaf.status } : {}), assignee }));
+        }
+        break;
+      }
       case 'clear-block': {
         const leaf = leafOf(change.key);
         const path = planPath(leaf, tree);

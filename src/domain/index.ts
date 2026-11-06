@@ -4,3 +4,4 @@ export * from './next';
 export * from './ticket-store';
 export * from './agent-loop';
 export * from './standup';
+export * from './people';
