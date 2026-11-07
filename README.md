@@ -29,7 +29,7 @@ To use the built binary from this checkout, run `bun run link:local`. This symli
 
 | | How | Writes |
 |---|---|---|
-| **Local checkout** | `bmad-board` inside the project (from source: `bun run start -- --root ~/code/my-project`) | each change is one commit on your current branch (never pushed) |
+| **Local checkout** | `bmad-board` inside the project (from source: `bun run start -- --root ~/code/my-project`) | each change is one commit on your current branch (never pushed), or, with **Commit on save** off in Settings, written and left uncommitted |
 | **GitHub repo** | "GitHub" in the sidebar, `owner/name`, then sign in with your local `gh` login (needs the local server; the token never reaches the browser) or a fine-grained token (Contents + Pull requests: write) | commits on a `bmad-board/…` branch, one pull request per session |
 | **Open folder** | "Open folder" in Chrome or Edge | read-only |
 
@@ -80,8 +80,9 @@ Edits to a v6 project change only the lines they mean to, so comments, blank lin
 - **Mine** (or `m`) shows only the tickets assigned to you.
 - **Keyboard shortcuts**, after Kaneo's: `g` then `n`/`b`/`l`/`d`/`u`/`s` to switch views, `c` for a new ticket, `/` to find in titles, `x` for filters, `h` to hide done tickets, `[` to fold the sidebar, and `?` for the full list.
 - **Settings** has two scopes:
-  - *Yours*, kept in this browser: theme, which fields cards show (with a live preview), compact cards, the Done column, the view the board opens on, the sidebar, the stand-up range, and where links open.
+  - *Yours*, kept in this browser: theme, which fields cards show (with a live preview), compact cards, the Done column, the view the board opens on, the sidebar, the stand-up range, where links open, and git: whether each change is committed as it's saved, and the commit message.
   - *The project's*, committed to `_bmad/custom/bmad-board.toml` for the whole team and its agents: work-in-progress limits per column (a column over its limit is flagged), names that are agents, and people to leave out of suggestions and stand-up, such as CI users.
+- **Commits are up to you.** Settings › Git has **Commit on save**. When it's on (the default), each change is one commit on your current branch. When it's off, a local project's files are written and left uncommitted, so you can review them and commit them yourself, or use **Commit now** in the same card. That commits only the files the board changed, as one commit, and leaves the rest of your working copy alone. The **commit message** template takes `{summary}`, `{author}` and `{kind}` and applies to GitHub projects too, which always commit to their pull request branch. A `Changed-by:` line is added when the template has none, since history uses it to tell people's changes from agents'.
 - Light and dark themes.
 
 The board follows BMAD's rules for who changes what: status, assignee and blocks go to each story's `*-plan.md`, and order and dependencies go to `tickets.toml`. Only a person moves a ticket to Done.

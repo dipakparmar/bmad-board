@@ -173,7 +173,34 @@ async function list(path: string) {
   }
 }
 
-async function commit(files: FileWrite[], message: string, author: Author) {
+/** Files the board wrote with commit on save off, until they are committed. Kept for this server's life. */
+const uncommitted = new Set<string>();
+
+/** Of the files the board left uncommitted, those that still differ from HEAD (a person may have committed them). */
+async function pending(): Promise<string[]> {
+  if (!uncommitted.size || !(await isRepo())) return [];
+  // Porcelain paths are relative to the repo's top, not the served folder, so ask path by path.
+  for (const p of [...uncommitted]) {
+    const st = await git(['status', '--porcelain', '--untracked-files=all', '--', p]);
+    if (st.ok && !st.out) uncommitted.delete(p);
+  }
+  return [...uncommitted];
+}
+
+/** Commits only the files the board left uncommitted; anything else in the working copy stays as it is. */
+async function commitPending(message: string, author: Author) {
+  const paths = await pending();
+  if (!paths.length) return { paths, commit: undefined };
+  const add = await git(['add', '--all', '--', ...paths]);
+  if (!add.ok) throw new HttpError(500, `git add failed: ${add.out}`);
+  const msg = message || `chore(tickets): board changes\n\nChanged-by: ${author.kind}:${author.name} via bmad-board`;
+  const done = await git(['commit', '-m', msg, '--', ...paths]);
+  if (!done.ok) throw new HttpError(500, `git commit failed: ${done.out}`);
+  for (const p of paths) uncommitted.delete(p);
+  return { paths, commit: (await git(['rev-parse', 'HEAD'])).out };
+}
+
+async function commit(files: FileWrite[], message: string, author: Author, doCommit = true) {
   if (!Array.isArray(files) || files.length === 0) throw new HttpError(400, 'nothing to write');
   const paths: string[] = [];
   for (const f of files) {
@@ -186,6 +213,11 @@ async function commit(files: FileWrite[], message: string, author: Author) {
     paths.push(relative(root, full));
   }
   if (!(await isRepo())) return { paths, commit: undefined, note: 'not a git repository; files written without a commit' };
+  if (!doCommit) {
+    for (const p of paths) uncommitted.add(p);
+    return { paths, commit: undefined, uncommitted: true };
+  }
+  for (const p of paths) uncommitted.delete(p);
   const add = await git(['add', '--all', '--', ...paths]);
   if (!add.ok) throw new HttpError(500, `git add failed: ${add.out}`);
   const msg = message || `chore(tickets): update via bmad-board\n\nChanged-by: ${author.kind}:${author.name}`;
@@ -382,8 +414,14 @@ const serve = (p: number) => Bun.serve({
           }
         }
         case 'POST /api/commit': {
-          const body = (await req.json()) as { files: FileWrite[]; message: string; author: Author };
-          return json(await commit(body.files, body.message, body.author));
+          const body = (await req.json()) as { files: FileWrite[]; message: string; author: Author; commit?: boolean };
+          return json(await commit(body.files, body.message, body.author, body.commit !== false));
+        }
+        case 'GET /api/pending':
+          return json({ paths: await pending() });
+        case 'POST /api/commit-pending': {
+          const body = (await req.json()) as { message: string; author: Author };
+          return json(await commitPending(body.message, body.author));
         }
         case 'GET /api/log':
           return json(await history(path, Number(url.searchParams.get('limit') ?? 30)));

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeAuthor, ChangeResult, TicketChange, TicketTree } from '../domain';
 import { clearCache, FileTicketStore, GitHubSource, LocalServerSource, probeLocalServer, type FileSource, type GitHubTarget } from '../store';
+import { loadPreferences } from './preferences';
 
 export interface Workspace {
   store: FileTicketStore;
@@ -110,7 +111,8 @@ export function useBoard() {
     const ws = workspaces.find((w) => w.store.id === id);
     if (!ws) return new Error('That project is no longer connected.');
     try {
-      const result = await ws.store.apply(changes, loadAuthor(), message);
+      const { git } = loadPreferences();
+      const result = await ws.store.apply(changes, loadAuthor(), message, { commit: git.commitOnSave, template: git.template });
       patch(id, { lastResult: result });
       await reload(ws.store);
       return result;

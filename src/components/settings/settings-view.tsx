@@ -2,7 +2,7 @@
  * Settings, in two scopes like Kaneo's: "You" (display preferences, kept in this browser) and
  * "Project" (team settings committed to `_bmad/custom/bmad-board.toml`, shared with everyone and every agent).
  */
-import { DatabaseZap, RotateCcw, Save } from 'lucide-react';
+import { DatabaseZap, GitCommitHorizontal, RotateCcw, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEffect, useState, type ReactNode } from 'react';
 import { applyWithToast } from '@/app/actions';
@@ -14,7 +14,9 @@ import { BOARD_CONFIG_PATH, DEFAULT_BOARD_CONFIG, type BoardConfig } from '@/dom
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { cacheStats } from '@/store';
+import { cacheStats, DEFAULT_COMMIT_TEMPLATE, fillTemplate } from '@/store';
+import { loadAuthor } from '@/app/use-board';
+import type { GitPreferences } from '@/app/preferences';
 import { cn } from '@/lib/cn';
 import { TaskCardBody } from '../board/task-card';
 import { ShortcutsList } from '../dialogs/shortcuts-dialog';
@@ -109,6 +111,8 @@ function YouSettings() {
 
       <LinkSettings />
 
+      <GitSettings />
+
       <Card title="Board" footer={<Button size="sm" variant="ghost" onClick={reset}><RotateCcw />Reset your settings</Button>}>
         <Row label="Open on" help="The view the board starts in."><Segmented label="Default view" value={prefs.defaultView} onChange={(v) => update({ defaultView: v })} options={VIEW_OPTIONS} /></Row>
         <Row label="Done column" help="Hide it to focus the board on open work."><Toggle label="Show the Done column" on={prefs.showDoneColumn} onChange={(v) => update({ showDoneColumn: v })} /></Row>
@@ -118,6 +122,78 @@ function YouSettings() {
         </Row>
       </Card>
     </>
+  );
+}
+
+/** Whether edits are committed as they're saved, the message they get, and committing what's left over. */
+function GitSettings() {
+  const { preferences, board } = useBoardContext();
+  const { prefs, update } = preferences;
+  const set = (patch: Partial<GitPreferences>) => update((p) => ({ git: { ...p.git, ...patch } }));
+  const local = board.workspaces.filter((w) => w.store.capabilities.write && w.store.capabilities.commits && !w.store.capabilities.pullRequests);
+  const github = board.workspaces.some((w) => w.store.capabilities.pullRequests);
+  const [draft, setDraft] = useState(prefs.git.template || DEFAULT_COMMIT_TEMPLATE);
+  useEffect(() => setDraft(prefs.git.template || DEFAULT_COMMIT_TEMPLATE), [prefs.git.template]);
+  const author = loadAuthor();
+  const preview = fillTemplate(draft, 'mark epic-1/2 in-progress', author);
+  const saveTemplate = () => set({ template: draft.trim() === DEFAULT_COMMIT_TEMPLATE ? '' : draft.trim() });
+  return (
+    <Card title="Git" description={<>How the board saves edits to a project on this computer.{github ? ' GitHub projects always commit, to the board’s pull request branch; the message template applies there too.' : ''}</>}>
+      <Row label="Commit on save" help={prefs.git.commitOnSave ? 'Each change is its own commit on the current branch (never pushed).' : 'Changes are written to the files and left uncommitted. Commit them yourself, or all at once below.'}>
+        <Toggle label="Commit on save" on={prefs.git.commitOnSave} onChange={(v) => set({ commitOnSave: v })} />
+      </Row>
+      <div className="flex flex-col gap-2 px-5 py-3">
+        <div>
+          <div className="text-sm">Commit message</div>
+          <div className="text-xs text-muted-foreground"><code>{'{summary}'}</code> is what changed, <code>{'{author}'}</code> who changed it, <code>{'{kind}'}</code> person or agent. A <code>Changed-by:</code> line is added if the template has none, because history uses it to tell people from agents.</div>
+        </div>
+        <Textarea aria-label="Commit message template" value={draft} onChange={(e) => setDraft(e.target.value)} className="min-h-20 font-mono text-xs" />
+        <div className="flex flex-wrap items-start gap-3">
+          <pre className="min-w-0 flex-1 whitespace-pre-wrap rounded-md bg-muted/60 p-2 font-mono text-[11px] text-muted-foreground">{preview}</pre>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" disabled={draft === DEFAULT_COMMIT_TEMPLATE} onClick={() => setDraft(DEFAULT_COMMIT_TEMPLATE)}>Default</Button>
+            <Button size="sm" disabled={draft.trim() === (prefs.git.template || DEFAULT_COMMIT_TEMPLATE)} onClick={saveTemplate}><Save />Save</Button>
+          </div>
+        </div>
+      </div>
+      {local.map((w) => <PendingRow key={w.store.id} store={w.store} label={w.store.label} template={prefs.git.template} />)}
+    </Card>
+  );
+}
+
+/** A local project's uncommitted board edits, and a button to commit them as one commit. */
+function PendingRow({ store, label, template }: { store: ReturnType<typeof useBoardContext>['board']['workspaces'][number]['store']; label: string; template: string }) {
+  const state = useBoardContext();
+  const [paths, setPaths] = useState<string[] | null>(null);
+  const [summary, setSummary] = useState('board changes');
+  const [busy, setBusy] = useState(false);
+  const lastResult = state.board.workspaces.find((w) => w.store.id === store.id)?.lastResult;
+  useEffect(() => {
+    let live = true;
+    void store.pending().then((p) => live && setPaths(p));
+    return () => { live = false; };
+  }, [store, lastResult]);
+  if (!paths?.length) return null;
+  const commit = async () => {
+    setBusy(true);
+    try {
+      const r = await store.commitPending(summary.trim() || 'board changes', loadAuthor(), template);
+      toast.success(`Committed ${r.paths.length} file${r.paths.length === 1 ? '' : 's'}`, { description: r.commit ? `Commit ${r.commit.slice(0, 7)} in ${label}.` : undefined });
+      setPaths(await store.pending());
+    } catch (e) {
+      toast.error('Could not commit', { description: e instanceof Error ? e.message : String(e) });
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="flex flex-col gap-2 px-5 py-3">
+      <div className="text-sm">{paths.length} file{paths.length === 1 ? '' : 's'} the board changed in <span className="font-medium">{label}</span> {paths.length === 1 ? 'is' : 'are'} not committed</div>
+      <ul className="max-h-28 overflow-y-auto font-mono text-[11px] text-muted-foreground">{paths.map((p) => <li key={p} className="truncate">{p}</li>)}</ul>
+      <div className="flex flex-wrap gap-2">
+        <Input aria-label="Summary for the commit" value={summary} onChange={(e) => setSummary(e.target.value)} className="min-w-48 flex-1" />
+        <Button size="sm" disabled={busy} onClick={() => void commit()}><GitCommitHorizontal />{busy ? 'Committing…' : 'Commit now'}</Button>
+      </div>
+    </div>
   );
 }
 

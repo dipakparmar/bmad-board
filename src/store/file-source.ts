@@ -61,8 +61,15 @@ export interface FileSource {
   list(path: string): Promise<FileEntry[] | null>;
   /** File text, or null when it does not exist. */
   read(path: string): Promise<string | null>;
-  /** Writes the files as one unit: one commit locally, one commit on the PR branch on GitHub. */
-  commit?(files: FileWrite[], message: string, author: ChangeAuthor): Promise<ChangeResult>;
+  /**
+   * Writes the files as one unit: one commit locally, one commit on the PR branch on GitHub. With
+   * `commit: false` a working-copy source writes them and leaves them uncommitted.
+   */
+  commit?(files: FileWrite[], message: string, author: ChangeAuthor, options?: { commit?: boolean }): Promise<ChangeResult>;
+  /** Files the board wrote without committing that still differ from HEAD. */
+  pending?(): Promise<string[]>;
+  /** Commits the files `pending` lists, as one commit. */
+  commitPending?(message: string, author: ChangeAuthor): Promise<ChangeResult>;
   watch?(onChange: () => void): () => void;
   /** Recent commits touching a path (a folder or file), newest first. */
   history?(path: string, limit?: number): Promise<Activity[]>;
@@ -119,12 +126,31 @@ export class MemorySource implements FileSource {
     return this.files.get(joinPath(path)) ?? null;
   }
 
-  async commit(files: FileWrite[], message: string, author: ChangeAuthor): Promise<ChangeResult> {
+  /** Paths written without a commit, in order. */
+  readonly uncommitted = new Set<string>();
+
+  async commit(files: FileWrite[], message: string, author: ChangeAuthor, options?: { commit?: boolean }): Promise<ChangeResult> {
     for (const f of files) {
       if (f.text === null) this.files.delete(joinPath(f.path));
       else this.files.set(joinPath(f.path), f.text);
     }
     const paths = files.map((f) => f.path);
+    if (options?.commit === false) {
+      for (const p of paths) this.uncommitted.add(p);
+      return { paths, uncommitted: true };
+    }
+    this.commits.push({ message, author, paths });
+    return { paths, commit: `mem-${this.commits.length}` };
+  }
+
+  async pending(): Promise<string[]> {
+    return [...this.uncommitted];
+  }
+
+  async commitPending(message: string, author: ChangeAuthor): Promise<ChangeResult> {
+    const paths = [...this.uncommitted];
+    this.uncommitted.clear();
+    if (!paths.length) return { paths };
     this.commits.push({ message, author, paths });
     return { paths, commit: `mem-${this.commits.length}` };
   }

@@ -11,7 +11,7 @@ export async function applyWithToast(state: BoardState, workspaceId: string, cha
     toast.error('Could not save the change', { description: result.message });
     return false;
   }
-  const where = result.pullRequestUrl ? 'on the pull request' : result.commit ? `in commit ${result.commit.slice(0, 7)}` : 'to disk';
+  const where = result.pullRequestUrl ? 'on the pull request' : result.commit ? `in commit ${result.commit.slice(0, 7)}` : result.uncommitted ? 'to disk, not committed' : 'to disk';
   toast.success(done, {
     description: `Saved ${where}.`,
     ...(result.pullRequestUrl ? { action: { label: 'Open PR', onClick: () => window.open(result.pullRequestUrl, '_blank', 'noopener') } } : {}),

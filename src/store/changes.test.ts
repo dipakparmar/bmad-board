@@ -126,3 +126,27 @@ describe('FileTicketStore.apply', () => {
     expect(tree.backlog.map((l) => l.title)).toContain('Coupon field accepts spaces');
   });
 });
+
+describe('commit options', () => {
+  test('commit on save off writes the files and leaves them for one later commit', async () => {
+    const { src, store } = await setup();
+    const result = await store.apply([{ kind: 'assign', key: 'epic-pricing-rules/2', assignee: 'Priya' }], person, undefined, { commit: false });
+    expect(result).toMatchObject({ uncommitted: true });
+    expect(result.commit).toBeUndefined();
+    expect(src.commits).toHaveLength(0);
+    expect(parseFrontmatter((await src.read(`${PRICING}/story-apply-and-refuse-discount-codes-plan.md`)) ?? '').data.assignee).toBe('Priya');
+    await store.load();
+    await store.apply([{ kind: 'mark', key: 'epic-pricing-rules/3', status: 'in-progress' }], person, undefined, { commit: false });
+    expect((await store.pending()).length).toBe(2);
+    const done = await store.commitPending('board changes', person, 'tickets: {summary} ({author})');
+    expect(done.paths).toHaveLength(2);
+    expect(src.commits.at(-1)?.message).toBe('tickets: board changes (Dipak)\n\nChanged-by: person:Dipak via bmad-board');
+    expect(await store.pending()).toEqual([]);
+  });
+
+  test('a message template fills its placeholders and keeps a Changed-by trailer it already has', async () => {
+    const { src, store } = await setup();
+    await store.apply([{ kind: 'clear-block', key: 'epic-pricing-rules/2' }, { kind: 'assign', key: 'epic-pricing-rules/2', assignee: 'Priya' }], person, undefined, { template: '[board] {summary}\n\nChanged-by: {kind}:{author}' });
+    expect(src.commits.at(-1)?.message).toBe('[board] update 2 tickets\n\nChanged-by: person:Dipak');
+  });
+});

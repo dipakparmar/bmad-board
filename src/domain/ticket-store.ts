@@ -48,10 +48,20 @@ export type TicketChange =
   | { kind: 'toggle-task'; key: TicketKey; index: number; checked: boolean; inFile?: boolean }
   | { kind: 'file-bug'; title: string; body: string };
 
+/** How a store saves: commit each change (the default), and the commit message's template. */
+export interface CommitOptions {
+  /** False: write the files and leave them uncommitted. Only stores that write a working copy honour it. */
+  commit?: boolean;
+  /** `{summary}`, `{author}` and `{kind}` are filled in. A `Changed-by:` trailer is added when it has none. */
+  template?: string;
+}
+
 export interface ChangeResult {
   /** Files written, relative to the project root. */
   paths: string[];
   commit?: string;
+  /** Written to disk and left for the person to commit (commit on save is off). */
+  uncommitted?: boolean;
   pullRequestUrl?: string;
 }
 
@@ -63,7 +73,7 @@ export interface TicketStore {
   load(): Promise<TicketTree>;
 
   /** Applies changes as one unit (one commit / one PR update). Rejects on a read-only store. */
-  apply(changes: TicketChange[], author: ChangeAuthor, message?: string): Promise<ChangeResult>;
+  apply(changes: TicketChange[], author: ChangeAuthor, message?: string, options?: CommitOptions): Promise<ChangeResult>;
 
   /** Optional: fires when files change outside the board (an agent ran, a pull happened). */
   watch?(onChange: () => void): () => void;

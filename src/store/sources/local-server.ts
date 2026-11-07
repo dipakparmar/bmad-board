@@ -130,11 +130,29 @@ export class LocalServerSource implements SnapshotSource {
     });
   }
 
-  async commit(files: FileWrite[], message: string, author: ChangeAuthor): Promise<ChangeResult> {
+  async commit(files: FileWrite[], message: string, author: ChangeAuthor, options?: { commit?: boolean }): Promise<ChangeResult> {
     const res = await fetch(`${this.base}/api/commit`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-bmad-board': '1' },
-      body: JSON.stringify({ files, message, author }),
+      body: JSON.stringify({ files, message, author, commit: options?.commit !== false }),
+    });
+    this.invalidate();
+    if (!res.ok) throw new Error(await errorOf(res));
+    return (await res.json()) as ChangeResult;
+  }
+
+  async pending(): Promise<string[]> {
+    if (!this.capabilities.commits) return [];
+    const res = await fetch(`${this.base}/api/pending`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return ((await res.json()) as { paths: string[] }).paths;
+  }
+
+  async commitPending(message: string, author: ChangeAuthor): Promise<ChangeResult> {
+    const res = await fetch(`${this.base}/api/commit-pending`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-bmad-board': '1' },
+      body: JSON.stringify({ message, author }),
     });
     this.invalidate();
     if (!res.ok) throw new Error(await errorOf(res));

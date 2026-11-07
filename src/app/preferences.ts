@@ -30,7 +30,21 @@ export interface Preferences {
   standupRange: 'workday' | '24h' | '7d';
   /** Where file, commit and branch links open. */
   links: LinkPreferences;
+  /** How board edits are saved. */
+  git: GitPreferences;
 }
+
+export interface GitPreferences {
+  /**
+   * Commit each change as it is saved. Off: a local project's files are written and left uncommitted,
+   * to commit yourself or with "Commit now". GitHub projects always commit, to the board's PR branch.
+   */
+  commitOnSave: boolean;
+  /** Commit message template; empty uses the default. `{summary}`, `{author}`, `{kind}`. */
+  template: string;
+}
+
+export const DEFAULT_GIT: GitPreferences = { commitOnSave: true, template: '' };
 
 export const DEFAULT_PREFERENCES: Preferences = {
   defaultView: 'next',
@@ -40,6 +54,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   showDoneColumn: true,
   standupRange: 'workday',
   links: DEFAULT_LINKS,
+  git: DEFAULT_GIT,
 };
 
 const KEY = 'bmad-board:preferences';
@@ -47,7 +62,7 @@ const KEY = 'bmad-board:preferences';
 export function loadPreferences(): Preferences {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Preferences>;
-    return { ...DEFAULT_PREFERENCES, ...saved, cardFields: { ...DEFAULT_PREFERENCES.cardFields, ...saved.cardFields }, links: { ...DEFAULT_LINKS, ...saved.links } };
+    return { ...DEFAULT_PREFERENCES, ...saved, cardFields: { ...DEFAULT_PREFERENCES.cardFields, ...saved.cardFields }, links: { ...DEFAULT_LINKS, ...saved.links }, git: { ...DEFAULT_GIT, ...saved.git } };
   } catch {
     return DEFAULT_PREFERENCES;
   }
