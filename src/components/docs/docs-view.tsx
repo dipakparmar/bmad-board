@@ -6,7 +6,8 @@
 import { ArrowLeft, BookOpen, ClipboardCopy, FileCode2, FileText, Folder, ListTree, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useBoardContext } from '@/app/board-context';
+import { useBoardContext, type Scope } from '@/app/board-context';
+import { Breadcrumbs, useScopeCrumbs } from '../layout/breadcrumbs';
 import { resolveDoc, useDocLibrary, type DocEntry, type ResolvedDoc } from '@/app/use-docs';
 import { DOC_KIND_LABELS, docKind, docOutline, docTitleFromPath, headingSlug, normalisePath, type DocKind, type DocLink } from '@/domain';
 import { parseFrontmatter } from '@/store/frontmatter';
@@ -57,8 +58,20 @@ function DocList({ docs, current, onOpen }: { docs: DocEntry[]; current?: string
 
 const show = (v: unknown): string => (Array.isArray(v) ? v.map(show).join(', ') : v && typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
 
+/** The initiative and epic a document sits in, by folder, for its breadcrumbs. */
+function containerScope(ws: { store: { id: string }; tree?: { initiatives: { slug: string; path: string; epics: { slug: string; path: string }[] }[] } | null }, path: string): Scope {
+  const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/') + 1);
+  for (const i of ws.tree?.initiatives ?? []) {
+    if (!dirOf(i.path) || !path.startsWith(dirOf(i.path))) continue;
+    const e = i.epics.find((x) => dirOf(x.path) !== dirOf(i.path) && path.startsWith(dirOf(x.path)));
+    return { workspaceId: ws.store.id, initiative: i.slug, epic: e?.slug };
+  }
+  return { workspaceId: ws.store.id };
+}
+
 export function DocReader({ workspaceId, link }: { workspaceId: string; link: DocLink }) {
-  const { board, openDoc, doc, closeDoc, tickets } = useBoardContext();
+  const { board, openDoc, doc, closeDoc, tickets, setDoc, setView } = useBoardContext();
+  const scopeCrumbs = useScopeCrumbs();
   const ws = board.workspaces.find((w) => w.store.id === workspaceId);
   const [state, setState] = useState<{ doc: ResolvedDoc | null; loading: boolean }>({ doc: null, loading: true });
   const scroller = useRef<HTMLDivElement>(null);
@@ -105,8 +118,12 @@ export function DocReader({ workspaceId, link }: { workspaceId: string; link: Do
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-border border-b px-4 py-2.5">
         {back && <Button size="sm" variant="ghost" onClick={closeDoc}><ArrowLeft />{backTicket ? `Back to ${backTicket.ref}` : 'Back'}</Button>}
         <KindBadge kind={kind} />
-        <h2 className="min-w-0 flex-1 truncate font-semibold">{docTitleFromPath(path)}</h2>
-        <span className="hidden max-w-[40%] truncate font-mono text-[11px] text-muted-foreground md:inline" title={path}>{path}</span>
+        <Breadcrumbs className="min-w-0 flex-1" items={[
+          { label: 'Docs', title: 'All documents', go: () => { setDoc(null); setView('docs'); } },
+          ...scopeCrumbs(containerScope(ws, path)).slice(1),
+          { label: docTitleFromPath(path), title: path, className: 'font-semibold', go: () => scroller.current?.scrollTo({ top: 0, behavior: 'smooth' }) },
+        ]} />
+        <span className="hidden max-w-[30%] truncate font-mono text-[11px] text-muted-foreground 2xl:inline" title={path}>{path}</span>
         <Button size="icon-sm" variant="ghost" aria-label="Copy path" title="Copy path" onClick={() => { void navigator.clipboard?.writeText(path); toast.success('Path copied'); }}><ClipboardCopy /></Button>
       </header>
       {state.doc && state.doc.siblings.length > 1 && (

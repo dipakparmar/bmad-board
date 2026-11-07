@@ -16,6 +16,7 @@ import { KindBadge } from '../docs/docs-view';
 import { DOC_KIND_LABELS, docTitleFromPath, type DocLink } from '@/domain';
 import { PropertiesRail } from './properties-rail';
 import { BranchLink, FileLink, useTicketRefs } from '../common/links';
+import { Breadcrumbs, useScopeCrumbs } from '../layout/breadcrumbs';
 import { TaskDescription } from './task-description';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -202,12 +203,15 @@ function TicketTitle({ full, className, children }: { full?: boolean; className?
 
 export function TicketHeader({ ticket: t, full }: { ticket: Ticket; full?: boolean }) {
   const { select, setExpanded, board } = useBoardContext();
+  const scopeCrumbs = useScopeCrumbs();
   const branch = board.workspaces.find((w) => w.store.id === t.workspaceId)?.store.links()?.branch;
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-border border-b px-4">
       {full && <Button size="sm" variant="ghost" onClick={() => setExpanded(false)}><ArrowLeft />Back</Button>}
-      <span className="font-mono text-xs text-muted-foreground">{t.ref}</span>
-      <span className="min-w-0 truncate text-xs text-muted-foreground">· {t.workspace.split(' · ')[0]}{full ? ` · ${t.epic?.title ?? (t.leaf.folder === 'backlog' ? 'Backlog' : t.initiative?.title ?? '')}` : ''}</span>
+      <Breadcrumbs size="xs" items={[
+        ...scopeCrumbs({ workspaceId: t.workspaceId, initiative: t.initiative?.slug, epic: t.leaf.folder === 'backlog' ? 'backlog' : t.epic?.slug }),
+        { label: t.ref, title: full ? `${t.ref}: ${t.leaf.title}` : `Open ${t.ref} full screen`, className: 'font-mono', go: () => setExpanded(true) },
+      ]} />
       {branch && <BranchLink workspaceId={t.workspaceId} branch={branch} className="max-w-48" />}
       <div className="ml-auto flex items-center gap-1">
         <Button size="icon-sm" variant="ghost" aria-label="Copy link" title="Copy link to this ticket" onClick={() => { void navigator.clipboard?.writeText(location.href); toast.success('Link copied'); }}><Link2 /></Button>

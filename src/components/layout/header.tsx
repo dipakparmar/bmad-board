@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { cn } from '@/lib/cn';
 import { ActiveFilters, FilterMenu } from './filter-bar';
+import { Breadcrumbs, useGoToScope, useScopeCrumbs, type Crumb } from './breadcrumbs';
 
 const VIEWS: { id: View; label: string; icon: typeof List }[] = [
   { id: 'next', label: "What's next", icon: Workflow },
@@ -19,23 +20,17 @@ const VIEWS: { id: View; label: string; icon: typeof List }[] = [
 export function Header() {
   const { scope, board, view, setView, search, setSearch, setDialog, inScope, mineOnly, setMineOnly } = useBoardContext();
   const { theme, toggle } = useTheme();
-  const ws = board.workspaces.find((w) => w.store.id === scope.workspaceId);
-  const initiative = ws?.tree?.initiatives.find((i) => i.slug === scope.initiative);
-  const epic = initiative?.epics.find((e) => e.slug === scope.epic);
-  const crumbs = [ws?.store.label ?? 'All projects', initiative?.title, scope.epic === 'backlog' ? 'Backlog' : epic?.title].filter(Boolean);
+  const go = useGoToScope();
+  const scopeCrumbs = useScopeCrumbs();
+  const crumbs: Crumb[] = [{ label: board.workspaces.length > 1 ? 'All projects' : 'All tickets', title: 'Every ticket in every project', go: () => go({}) }, ...scopeCrumbs(scope)];
 
   return (
     <header className="flex flex-col gap-3 border-border border-b px-5 py-3">
       <div className="flex flex-wrap items-center gap-3">
-        <nav className="flex min-w-0 items-center gap-1.5 text-sm">
-          {crumbs.map((c, i) => (
-            <span key={`${c}-${i}`} className="flex min-w-0 items-center gap-1.5">
-              {i > 0 && <span className="text-muted-foreground/50">/</span>}
-              <span className={cn('truncate', i === crumbs.length - 1 ? 'font-medium' : 'text-muted-foreground')}>{c}</span>
-            </span>
-          ))}
-          <span className="ml-1 text-xs tabular-nums text-muted-foreground">{inScope.length}</span>
-        </nav>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Breadcrumbs items={crumbs} />
+          <span className="text-xs tabular-nums text-muted-foreground">{inScope.length}</span>
+        </div>
         <div className="ml-auto flex items-center gap-1.5">
           <Button size="sm" variant="outline" onClick={() => setDialog('search')} className="text-muted-foreground"><Search />Search<Kbd className="ml-1">⌘K</Kbd></Button>
           <Button size="icon-sm" variant="ghost" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}><Keyboard /></Button>
