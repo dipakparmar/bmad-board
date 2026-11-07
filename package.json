@@ -12,7 +12,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "cli": "bun server/cli.ts",
-    "build:cli": "bun scripts/build-cli.ts"
+    "build:cli": "bun scripts/build-cli.ts",
+    "link:local": "sh scripts/link-local.sh"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",

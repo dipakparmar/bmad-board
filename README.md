@@ -23,6 +23,8 @@ It serves the current folder on <http://127.0.0.1:33714> (or the next free port)
 
 To build it yourself: `bun run build:cli` (this machine) or `bun scripts/build-cli.ts --all`, which writes `release/bmad-board-<os>-<arch>`. Pushing a `v*` tag builds all four, signs the macOS ones, smoke-tests them, and attaches them to a GitHub release.
 
+To use the built binary from this checkout, run `bun run link:local`. This symlinks the matching `release/bmad-board-<os>-<arch>` into `~/.local/bin/bmad-board`; set `BMAD_BOARD_INSTALL_DIR` to choose another directory.
+
 ## Three ways to connect a project
 
 | | How | Writes |
