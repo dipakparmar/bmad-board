@@ -2,6 +2,7 @@ import type { ChangeAuthor, ChangeResult, TicketChange, TicketStore, TicketTree 
 import { planChanges } from './changes';
 import type { FileSource } from './file-source';
 import { loadTicketTree } from './load-tree';
+import { loadWithSnapshot } from './snapshot';
 
 /** Commit message in the repo's conventional style, with who made the change as a trailer. */
 export function commitMessage(changes: TicketChange[], author: ChangeAuthor, message?: string): string {
@@ -25,6 +26,9 @@ function describe(c: TicketChange): string {
 }
 
 /** A TicketStore over any FileSource: the shared loader and planner plus the source's own commit. */
+/** Bump when the parsed tree's shape changes, so trees cached by an older board are not reused. */
+const TREE_FORMAT = 3;
+
 export class FileTicketStore implements TicketStore {
   private tree: TicketTree | null = null;
 
@@ -34,8 +38,13 @@ export class FileTicketStore implements TicketStore {
   get label() { return this.source.label; }
   get capabilities() { return this.source.capabilities; }
 
+  /** Whether the last load reused the cached tree because nothing it reads had changed. */
+  lastLoadReused = false;
+
   async load(): Promise<TicketTree> {
-    this.tree = await loadTicketTree(this.source);
+    const { value, reused } = await loadWithSnapshot(this.source, `tree:${TREE_FORMAT}:${this.source.id}`, loadTicketTree);
+    this.tree = value;
+    this.lastLoadReused = reused;
     return this.tree;
   }
 

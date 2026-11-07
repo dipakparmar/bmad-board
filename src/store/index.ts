@@ -5,3 +5,5 @@ export * from './store';
 export * from './sources/local-server';
 export * from './sources/github';
 export * from './sources/browser-folder';
+export * from './snapshot';
+export * from './cache';

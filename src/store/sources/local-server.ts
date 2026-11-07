@@ -1,6 +1,7 @@
 /** Talks to `server/index.ts`: reads files, writes them as one git commit, and streams change events. */
 import { membersFromGitLog, type ChangeAuthor, type ChangeResult, type Member, type StoreCapabilities } from '../../domain';
-import type { Activity, FileEntry, FileSource, FileWrite } from '../file-source';
+import type { Activity, FileEntry, FileWrite } from '../file-source';
+import { readThroughCache, snapshotFromFiles, underPrefixes, type Snapshot, type SnapshotSource } from '../snapshot';
 
 export interface ServerInfo {
   root: string;
@@ -31,7 +32,7 @@ export async function ghCliStatus(base = ''): Promise<{ available: boolean; logi
   }
 }
 
-export class LocalServerSource implements FileSource {
+export class LocalServerSource implements SnapshotSource {
   readonly id: string;
   readonly label: string;
   readonly capabilities: StoreCapabilities;
@@ -42,6 +43,27 @@ export class LocalServerSource implements FileSource {
     this.capabilities = { write: true, commits: info.git, pullRequests: false, watch: true };
   }
 
+  private snap: Promise<Snapshot | null> | null = null;
+
+  /**
+   * Every BMAD file's version from one `/api/tree` call. Taken fresh at the start of each load; reads
+   * reuse the latest one until a write or a file change event drops it.
+   */
+  snapshot(): Promise<Snapshot | null> {
+    this.snap = fetch(`${this.base}/api/tree`, { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const t = (await res.json()) as { at: string; covered: string[]; files: [string, string][] };
+        return t.covered.length ? snapshotFromFiles(t.at, t.files, underPrefixes(t.covered)) : null;
+      })
+      .catch(() => null);
+    return this.snap;
+  }
+
+  invalidate() {
+    this.snap = null;
+  }
+
   async list(path: string): Promise<FileEntry[] | null> {
     const res = await fetch(`${this.base}/api/list?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
     if (res.status === 404) return null;
@@ -50,10 +72,14 @@ export class LocalServerSource implements FileSource {
   }
 
   async read(path: string): Promise<string | null> {
-    const res = await fetch(`${this.base}/api/read?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(await errorOf(res));
-    return res.text();
+    // Only trust a snapshot taken for the load in progress; with none, read straight through.
+    const snap = this.snap ? await this.snap : null;
+    return readThroughCache(snap, path, async () => {
+      const res = await fetch(`${this.base}/api/read?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(await errorOf(res));
+      return res.text();
+    });
   }
 
   async commit(files: FileWrite[], message: string, author: ChangeAuthor): Promise<ChangeResult> {
@@ -62,6 +88,7 @@ export class LocalServerSource implements FileSource {
       headers: { 'content-type': 'application/json', 'x-bmad-board': '1' },
       body: JSON.stringify({ files, message, author }),
     });
+    this.invalidate();
     if (!res.ok) throw new Error(await errorOf(res));
     return (await res.json()) as ChangeResult;
   }
@@ -81,7 +108,10 @@ export class LocalServerSource implements FileSource {
   watch(onChange: () => void): () => void {
     const events = new EventSource(`${this.base}/api/events`);
     events.onmessage = (e) => {
-      if (e.data === 'change') onChange();
+      if (e.data === 'change') {
+        this.invalidate();
+        onChange();
+      }
     };
     return () => events.close();
   }

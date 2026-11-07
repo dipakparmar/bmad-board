@@ -3,7 +3,9 @@
  * `bmad-board/…` branch with one pull request per editing session, so every board change gets reviewed.
  */
 import type { ChangeAuthor, ChangeResult, Member, StoreCapabilities } from '../../domain';
+import { cacheGet, cacheSet } from '../cache';
 import { changedByOf, joinPath, type Activity, type FileEntry, type FileSource, type FileWrite } from '../file-source';
+import { readThroughCache, snapshotFromFiles, type Snapshot } from '../snapshot';
 
 export interface GitHubTarget {
   owner: string;
@@ -34,12 +36,13 @@ export class GitHubSource implements FileSource {
   private sessionBranch: string | null = null;
   private pullRequestUrl: string | undefined;
   private tree: Map<string, TreeItem> | null = null;
-  private blobs = new Map<string, string>();
+  /** The snapshot the tree belongs to, and the commit it was taken at. */
+  private snap: { commit: string; snapshot: Snapshot } | null = null;
 
   private readonly api: string;
 
   /** `localBase` is where the local server runs, for `useGhCli`; `api` overrides the API root (tests). */
-  constructor(private readonly target: GitHubTarget, api?: string, localBase = '') {
+  constructor(readonly target: GitHubTarget, api?: string, localBase = '') {
     this.id = `github:${target.owner}/${target.repo}`;
     this.label = target.branch ? `${target.owner}/${target.repo} · ${target.branch}` : `${target.owner}/${target.repo}`;
     this.api = api ?? (target.useGhCli ? `${localBase}/api/gh` : 'https://api.github.com');
@@ -69,21 +72,43 @@ export class GitHubSource implements FileSource {
     return `/repos/${this.target.owner}/${this.target.repo}${path}`;
   }
 
-  /** Loads the whole file listing once per ref; a BMAD store is small. */
-  private async ensureTree(): Promise<Map<string, TreeItem>> {
-    if (this.tree) return this.tree;
+  /**
+   * Where the branch is now (one request, revalidated with its ETag so an unchanged ref costs no rate
+   * limit), and the file tree at that commit: from memory, then IndexedDB, then one recursive tree call.
+   * File text is cached by blob SHA, so after a new commit only the files it changed are fetched.
+   */
+  async snapshot(): Promise<Snapshot> {
     if (!this.base) {
       this.base = this.target.branch ?? (await this.call<{ default_branch: string }>(this.repoPath())).default_branch;
       this.ref = this.base;
     }
-    const tree = await this.call<{ tree: TreeItem[]; truncated: boolean }>(this.repoPath(`/git/trees/${encodeURIComponent(this.ref)}?recursive=1`));
+    const head = await this.call<{ object: { sha: string } }>(this.repoPath(`/git/ref/heads/${encodeURIComponent(this.ref)}`), { cache: 'no-cache' });
+    const commit = head.object.sha;
+    if (this.snap?.commit === commit && this.tree) return this.snap.snapshot;
+    const key = `ghtree:${this.target.owner}/${this.target.repo}:${commit}`;
+    let listing = await cacheGet<{ items: TreeItem[]; truncated: boolean }>(key);
+    if (!listing) {
+      const tree = await this.call<{ tree: TreeItem[]; truncated: boolean }>(this.repoPath(`/git/trees/${commit}?recursive=1`));
+      listing = { items: tree.tree.map(({ path, type, sha }) => ({ path, type, sha })), truncated: tree.truncated };
+      void cacheSet(key, listing);
+    }
     const prefix = this.target.dir ? `${joinPath(this.target.dir)}/` : '';
-    this.tree = new Map(tree.tree.filter((t) => t.path.startsWith(prefix)).map((t) => [t.path.slice(prefix.length), t]));
-    return this.tree;
+    this.tree = new Map(listing.items.filter((t) => t.path.startsWith(prefix)).map((t) => [t.path.slice(prefix.length), t]));
+    const blobs = [...this.tree].filter(([, t]) => t.type === 'blob').map(([p, t]): [string, string] => [p, t.sha]);
+    // A truncated listing (a very large repo) can't vouch for missing files, so it caches nothing.
+    const truncated = listing.truncated;
+    this.snap = { commit, snapshot: snapshotFromFiles(commit, blobs, () => !truncated) };
+    return this.snap.snapshot;
+  }
+
+  private async ensureTree(): Promise<Map<string, TreeItem>> {
+    if (!this.tree) await this.snapshot();
+    return this.tree ?? new Map();
   }
 
   invalidate() {
     this.tree = null;
+    this.snap = null;
   }
 
   async list(path: string): Promise<FileEntry[] | null> {
@@ -101,13 +126,11 @@ export class GitHubSource implements FileSource {
   async read(path: string): Promise<string | null> {
     const item = (await this.ensureTree()).get(joinPath(path));
     if (!item || item.type !== 'blob') return null;
-    const cached = this.blobs.get(item.sha);
-    if (cached !== undefined) return cached;
-    const blob = await this.call<{ content: string; encoding: string }>(this.repoPath(`/git/blobs/${item.sha}`));
-    const bytes = Uint8Array.from(atob(blob.content.replace(/\n/g, '')), (c) => c.charCodeAt(0));
-    const text = new TextDecoder().decode(bytes);
-    this.blobs.set(item.sha, text);
-    return text;
+    return readThroughCache(this.snap?.snapshot ?? null, path, async () => {
+      const blob = await this.call<{ content: string; encoding: string }>(this.repoPath(`/git/blobs/${item.sha}`));
+      const bytes = Uint8Array.from(atob(blob.content.replace(/\n/g, '')), (c) => c.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    });
   }
 
   async commit(files: FileWrite[], message: string, author: ChangeAuthor): Promise<ChangeResult> {
@@ -130,7 +153,7 @@ export class GitHubSource implements FileSource {
     });
     await this.call(this.repoPath(`/git/refs/heads/${branch}`), { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
     this.ref = branch;
-    this.tree = null;
+    this.invalidate();
     if (!this.pullRequestUrl) {
       const pr = await this.call<{ html_url: string }>(this.repoPath('/pulls'), {
         method: 'POST',

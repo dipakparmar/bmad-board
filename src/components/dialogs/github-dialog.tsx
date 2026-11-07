@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useBoardContext } from '@/app/board-context';
+import { TOKEN_KEY } from '@/app/use-board';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { GitHubSource, ghCliStatus, LocalServerSource, parseRepo } from '@/store';
-
-const TOKEN_KEY = 'bmad-board:github-token';
 
 function readToken() {
   try {

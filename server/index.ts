@@ -182,6 +182,78 @@ async function history(path: string, limit: number) {
   });
 }
 
+/**
+ * The project's BMAD files and their versions, so the browser can tell what changed since it last
+ * looked without reading anything: git blob SHAs (`git ls-files -s`, with `git hash-object` for files
+ * edited, untracked or ignored in the worktree), or modified-time and size outside git. Scoped to the
+ * BMAD folders; `covered` says which, so the browser reads anything else the slow way.
+ */
+const TREE_LIMIT = 20_000;
+
+async function bmadPrefixes(): Promise<string[]> {
+  const found = new Set(['_bmad', '_bmad-output', 'docs']);
+  for (const cfg of ['_bmad/config.toml', '_bmad/custom/config.toml', '_bmad/custom/config.user.toml', '_bmad/bmm/config.yaml', '_bmad/core/config.yaml']) {
+    const text = await readFile(inside(root, cfg), 'utf8').catch(() => '');
+    for (const m of text.matchAll(/^\s*(?:output_folder|planning_artifacts|implementation_artifacts|project_knowledge)\s*[:=]\s*["']?([^"'\n#]+?)["']?\s*(?:#.*)?$/gm)) {
+      const p = (m[1] ?? '').replace(/^\{project-root\}\/?/, '').replace(/^\.\//, '').replace(/\/+$/, '');
+      if (p && !p.includes('{') && !p.startsWith('/') && !p.split('/').includes('..')) found.add(p.split('/')[0] ?? p);
+    }
+  }
+  return [...found].filter((p) => p !== '.git');
+}
+
+async function gitLines(args: string[]): Promise<string[] | null> {
+  const r = await git(args);
+  return r.ok ? r.out.split('\0').filter(Boolean) : null;
+}
+
+async function tree() {
+  const prefixes = await bmadPrefixes();
+  const files = new Map<string, string>();
+  if (await isRepo()) {
+    const head = (await git(['rev-parse', 'HEAD'])).out;
+    // Paths come back relative to the root even when the root is a subfolder of the repo.
+    const staged = await gitLines(['ls-files', '-s', '-z', '--', ...prefixes]);
+    if (!staged) return { at: head, covered: [], files: [] };
+    for (const line of staged) {
+      const tab = line.indexOf('\t');
+      const sha = line.split(' ')[1];
+      if (tab > 0 && sha) files.set(line.slice(tab + 1), sha);
+    }
+    for (const gone of (await gitLines(['ls-files', '-d', '-z', '--', ...prefixes])) ?? []) files.delete(gone);
+    const dirty = [...new Set([...((await gitLines(['ls-files', '-m', '-z', '--', ...prefixes])) ?? []), ...((await gitLines(['ls-files', '-o', '-z', '--', ...prefixes])) ?? [])])]
+      .filter((p) => !p.endsWith('/'));
+    if (files.size + dirty.length > TREE_LIMIT) return { at: head, covered: [], files: [] };
+    if (dirty.length) {
+      const proc = Bun.spawn(['git', 'hash-object', '--no-filters', '--stdin-paths'], { cwd: root, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+      proc.stdin.write(dirty.join('\n') + '\n');
+      proc.stdin.end();
+      const shas = (await new Response(proc.stdout).text()).trim().split('\n');
+      if ((await proc.exited) === 0 && shas.length === dirty.length) dirty.forEach((p, i) => files.set(p, shas[i] ?? ''));
+      else return { at: head, covered: [], files: [] };
+    }
+    const at = `${head}:${Bun.hash([...files].sort().join('\n')).toString(36)}`;
+    return { at, covered: prefixes, files: [...files] };
+  }
+  // Not a git repository: modified time and size stand in for content.
+  let count = 0;
+  const walk = async (dir: string): Promise<boolean> => {
+    const entries = await readdir(join(root, dir), { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      const rel = dir ? `${dir}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (!(await walk(rel))) return false; }
+      else if (e.isFile()) {
+        if (++count > TREE_LIMIT) return false;
+        const s = await stat(join(root, rel)).catch(() => null);
+        if (s) files.set(rel, `fs:${rel}:${Math.round(s.mtimeMs)}:${s.size}`);
+      }
+    }
+    return true;
+  };
+  for (const p of prefixes) if (!(await walk(p))) return { at: 'fs', covered: [], files: [] };
+  return { at: `fs:${Bun.hash([...files].sort().join('\n')).toString(36)}`, covered: prefixes, files: [...files] };
+}
+
 /** Server-sent events: one `change` event (debounced) whenever a file under the root changes. */
 function events(): Response {
   let close = () => {};
@@ -189,7 +261,17 @@ function events(): Response {
     start(controller) {
       const enc = new TextEncoder();
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const send = (data: string) => controller.enqueue(enc.encode(`data: ${data}\n\n`));
+      let open = true;
+      // A watcher event can land after the browser went away; never write to a closed stream.
+      const push = (chunk: string) => {
+        if (!open) return;
+        try {
+          controller.enqueue(enc.encode(chunk));
+        } catch {
+          close();
+        }
+      };
+      const send = (data: string) => push(`data: ${data}\n\n`);
       send('ready');
       let watcher: ReturnType<typeof watch> | undefined;
       try {
@@ -201,8 +283,10 @@ function events(): Response {
       } catch {
         send('unwatchable');
       }
-      const ping = setInterval(() => controller.enqueue(enc.encode(': ping\n\n')), 25_000);
+      const ping = setInterval(() => push(': ping\n\n'), 25_000);
       close = () => {
+        open = false;
+        clearTimeout(timer);
         clearInterval(ping);
         watcher?.close();
       };
@@ -265,6 +349,8 @@ const server = Bun.serve({
         }
         case 'GET /api/log':
           return json(await history(path, Number(url.searchParams.get('limit') ?? 30)));
+        case 'GET /api/tree':
+          return json(await tree());
         case 'GET /api/people':
           return json(await people());
         case 'GET /api/events':

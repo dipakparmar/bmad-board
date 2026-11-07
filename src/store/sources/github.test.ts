@@ -1,11 +1,14 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { FileTicketStore } from '../store';
+import { clearMemoryCache } from '../cache';
 import { allLeaves } from '../load-tree';
 import { fixture } from '../testing/fixture';
 import { GitHubSource, parseRepo } from './github';
 
 /** A tiny fake of the GitHub git-data API, holding one repo in memory. */
 function fakeGitHub(files: Map<string, string>) {
+  // The fake's SHAs are counters, not content hashes, so the content-addressed cache must start empty.
+  clearMemoryCache();
   const blobs = new Map<string, string>();
   const commits = new Map<string, { tree: Map<string, string>; parents: string[]; message: string }>();
   const refs = new Map<string, string>();
@@ -28,7 +31,7 @@ function fakeGitHub(files: Map<string, string>) {
       let m = /^\/git\/trees\/(.+)$/.exec(p);
       if (m && req.method === 'GET') {
         const ref = decodeURIComponent(m[1] ?? '');
-        const tree = commits.get(refs.get(ref) ?? '')?.tree ?? new Map();
+        const tree = commits.get(refs.get(ref) ?? ref)?.tree ?? new Map();
         const dirs = new Set<string>();
         for (const path of tree.keys()) { const parts = path.split('/'); for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join('/')); }
         return Response.json({ truncated: false, tree: [...[...dirs].map((d) => ({ path: d, type: 'tree', sha: 'd' })), ...[...tree].map(([path, sha]) => ({ path, type: 'blob', sha }))] });

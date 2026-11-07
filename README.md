@@ -12,6 +12,8 @@ New here? Start with [docs/getting-started.md](docs/getting-started.md). See [do
 | **GitHub repo** | "GitHub" in the sidebar, `owner/name`, then sign in with your local `gh` login (needs the local server; the token never reaches the browser) or a fine-grained token (Contents + Pull requests: write) | commits on a `bmad-board/…` branch, one pull request per session |
 | **Open folder** | "Open folder" in Chrome or Edge | read-only |
 
+GitHub repos you connect come back when you reload, and every project is cached in the browser by git: file text is kept by blob SHA (in IndexedDB, so it survives reloads and is shared across repos and branches), and the parsed board is kept with the versions of the exact files it read. On reload the board asks for the current file versions in one call (GitHub's branch ref and tree; the local server's `/api/tree`, from `git ls-files` plus `git hash-object` for uncommitted edits), reuses the board outright when none of its files changed, and otherwise fetches only the files whose content changed. Commits that only touch code cost nothing.
+
 Projects on the older v6 layout open read-only, parsed the way v6's workflows write them:
 - `sprint-status.yaml` (paths from `_bmad/bmm/config.yaml`): project metadata, epic statuses, stories including split ones (`2-6a-…`), retrospectives and their action items. Legacy statuses (`drafted`, `contexted`) are mapped.
 - `epics.md` or sharded `epics/epic-N.md`: epic titles and goals, plus stories that sprint planning hasn't picked up yet, which show as backlog.

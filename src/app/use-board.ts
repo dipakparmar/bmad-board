@@ -1,7 +1,7 @@
 /** Board state: the connected projects, their loaded trees, and writes through each project's store. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeAuthor, ChangeResult, TicketChange, TicketTree } from '../domain';
-import { FileTicketStore, LocalServerSource, probeLocalServer, type FileSource } from '../store';
+import { FileTicketStore, GitHubSource, LocalServerSource, probeLocalServer, type FileSource, type GitHubTarget } from '../store';
 
 export interface Workspace {
   store: FileTicketStore;
@@ -31,6 +31,42 @@ export function saveAuthor(name: string) {
   }
 }
 
+const REPOS_KEY = 'bmad-board:github-repos';
+export const TOKEN_KEY = 'bmad-board:github-token';
+
+/** GitHub repos connected in this browser, so a refresh reconnects them (and their cache pays off). Never the token itself. */
+type RememberedRepo = Omit<GitHubTarget, 'token'> & { withToken?: boolean };
+
+function rememberedRepos(): RememberedRepo[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(REPOS_KEY) ?? '[]') as unknown;
+    return Array.isArray(list) ? list.filter((r): r is RememberedRepo => !!r && typeof r.owner === 'string' && typeof r.repo === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRepos(update: (all: RememberedRepo[]) => RememberedRepo[]) {
+  try {
+    localStorage.setItem(REPOS_KEY, JSON.stringify(update(rememberedRepos())));
+  } catch {
+    /* storage can be blocked */
+  }
+}
+
+const repoId = (r: { owner: string; repo: string }) => `github:${r.owner}/${r.repo}`;
+
+function restoreRepo(r: RememberedRepo): GitHubSource {
+  let token: string | undefined;
+  try {
+    token = r.withToken ? localStorage.getItem(TOKEN_KEY) ?? undefined : undefined;
+  } catch {
+    /* storage can be blocked */
+  }
+  const { withToken: _w, ...target } = r;
+  return new GitHubSource({ ...target, token });
+}
+
 export function useBoard() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [serverAvailable, setServerAvailable] = useState(false);
@@ -52,6 +88,10 @@ export function useBoard() {
 
   const add = useCallback(async (source: FileSource) => {
     const store = new FileTicketStore(source);
+    if (source instanceof GitHubSource) {
+      const { token, ...target } = source.target;
+      saveRepos((all) => [...all.filter((r) => repoId(r) !== source.id), { ...target, withToken: !!token }]);
+    }
     setWorkspaces((all) => [...all.filter((w) => w.store.id !== store.id), { store, tree: null, loading: true }]);
     unwatch.current.get(store.id)?.();
     if (store.capabilities.watch) unwatch.current.set(store.id, store.watch(() => void reload(store)));
@@ -59,6 +99,7 @@ export function useBoard() {
   }, [reload]);
 
   const remove = useCallback((id: string) => {
+    saveRepos((all) => all.filter((r) => repoId(r) !== id));
     unwatch.current.get(id)?.();
     unwatch.current.delete(id);
     setWorkspaces((all) => all.filter((w) => w.store.id !== id));
@@ -87,6 +128,12 @@ export function useBoard() {
         void add(new LocalServerSource(info));
       }
     });
+    // GitHub repos from last time come back on their own; the git cache makes that cheap.
+    for (const r of rememberedRepos()) {
+      // A gh CLI repo needs the local server; wait for the probe so it does not fail first.
+      if (r.useGhCli) void probeLocalServer().then((info) => { if (info && !cancelled) void add(restoreRepo(r)); });
+      else void add(restoreRepo(r));
+    }
     const subscriptions = unwatch.current;
     return () => {
       cancelled = true;
