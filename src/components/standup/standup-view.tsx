@@ -1,8 +1,12 @@
 /**
  * Stand-up: one card per person or agent with what they finished, what they're on, what waits on
  * review and what blocks them. "Run stand-up" walks the team one member at a time with a timer.
+ *
+ * Everything is sized to the screen: cards sit side by side at full height, each scrolls on its own,
+ * and the notes box stays pinned at the bottom of its card, so nobody scrolls the page to reach it.
+ * Full screen hides the rest of the board for running the meeting on a shared screen.
  */
-import { Bot, CheckCheck, ChevronLeft, ChevronRight, ClipboardCopy, Hand, Pencil, Play, Save, Square, UserRound } from 'lucide-react';
+import { Bot, CheckCheck, ChevronLeft, ChevronRight, ClipboardCopy, Hand, Maximize2, Minimize2, Pencil, Play, Save, Square, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { applyWithToast, setStatus } from '@/app/actions';
@@ -77,13 +81,13 @@ function Section({ title, tone, children, empty }: { title: string; tone: string
   );
 }
 
-function MemberCard({ m, focused, big, note, onNote }: { m: StandupMember<Ticket>; focused?: boolean; big?: boolean; note: string; onNote: (v: string) => void }) {
+function MemberCard({ m, focused, big, note, onNote, className }: { m: StandupMember<Ticket>; focused?: boolean; big?: boolean; note: string; onNote: (v: string) => void; className?: string }) {
   const Icon = m.agent ? Bot : UserRound;
   // Commits that touched no ticket we know of still count as work done; list a few.
   const loose = m.finished.length ? [] : m.commits.slice(0, big ? 8 : 3);
   return (
-    <section className={cn('flex flex-col gap-3 rounded-xl border bg-board-card p-4 shadow-board-card', focused ? 'border-primary ring-2 ring-primary/20' : 'border-board-card-border', big && 'p-6')}>
-      <header className="flex items-center gap-2">
+    <section className={cn('flex min-h-0 flex-col rounded-xl border bg-board-card shadow-board-card', focused ? 'border-primary ring-2 ring-primary/20' : 'border-board-card-border', className)}>
+      <header className={cn('flex shrink-0 items-center gap-2 border-board-card-border border-b px-4 py-3', big && 'px-6 py-4')}>
         <span className={cn('grid size-7 place-items-center rounded-full', m.agent ? 'bg-info/15 text-info' : 'bg-primary/12 text-primary')}><Icon className="size-4" /></span>
         <div className="min-w-0 flex-1">
           <div className={cn('truncate font-medium', big ? 'text-lg' : 'text-sm')}>{m.name}</div>
@@ -91,25 +95,29 @@ function MemberCard({ m, focused, big, note, onNote }: { m: StandupMember<Ticket
         </div>
         {m.blocked.length > 0 && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive-foreground">{m.blocked.length} blocked</span>}
       </header>
-      <Section title="Done since" tone="text-success" empty="Nothing new.">
-        {[
-          ...m.finished.map((t) => <TicketLine key={t.uid} ticket={t} note={t.leaf.status === 'done' ? undefined : 'Built, waiting for review'} />),
-          ...loose.map((c: StandupCommit) => <div key={c.sha} className="truncate px-1.5 text-xs text-muted-foreground">· {c.subject}</div>),
-        ]}
-      </Section>
-      <Section title="Working on" tone="text-info" empty="Nothing in progress.">
-        {m.doing.map((t) => <TicketLine key={t.uid} ticket={t} />)}
-      </Section>
-      <Section title="Waiting on review" tone="text-warning">
-        {m.review.map((t) => <TicketLine key={t.uid} ticket={t} />)}
-      </Section>
-      <Section title="Blocked" tone="text-destructive-foreground">
-        {m.blocked.map((t) => <TicketLine key={t.uid} ticket={t} note={t.leaf.plan?.blockedReason ?? t.blockedReason ?? 'No reason given'} />)}
-      </Section>
-      <Section title="Up next" tone="text-muted-foreground">
-        {m.upNext.map((t) => <TicketLine key={t.uid} ticket={t} />)}
-      </Section>
-      <NoteBox value={note} onChange={onNote} rows={big ? 4 : 2} placeholder={`Notes on ${m.name}'s update…`} />
+      <div className={cn('flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3', big && 'px-6')} data-slot="standup-sections">
+        <Section title="Done since" tone="text-success" empty="Nothing new.">
+          {[
+            ...m.finished.map((t) => <TicketLine key={t.uid} ticket={t} note={t.leaf.status === 'done' ? undefined : 'Built, waiting for review'} />),
+            ...loose.map((c: StandupCommit) => <div key={c.sha} className="truncate px-1.5 text-xs text-muted-foreground">· {c.subject}</div>),
+          ]}
+        </Section>
+        <Section title="Working on" tone="text-info" empty="Nothing in progress.">
+          {m.doing.map((t) => <TicketLine key={t.uid} ticket={t} />)}
+        </Section>
+        <Section title="Waiting on review" tone="text-warning">
+          {m.review.map((t) => <TicketLine key={t.uid} ticket={t} />)}
+        </Section>
+        <Section title="Blocked" tone="text-destructive-foreground">
+          {m.blocked.map((t) => <TicketLine key={t.uid} ticket={t} note={t.leaf.plan?.blockedReason ?? t.blockedReason ?? 'No reason given'} />)}
+        </Section>
+        <Section title="Up next" tone="text-muted-foreground">
+          {m.upNext.map((t) => <TicketLine key={t.uid} ticket={t} />)}
+        </Section>
+      </div>
+      <div className={cn('shrink-0 border-board-card-border border-t p-3', big && 'px-6 py-4')}>
+        <NoteBox value={note} onChange={onNote} rows={big ? 4 : 3} placeholder={`Notes on ${m.name}'s update…`} />
+      </div>
     </section>
   );
 }
@@ -130,6 +138,27 @@ export function StandupView() {
   const { preferences } = useBoardContext();
   const [since, setSince] = useState<Since>(preferences.prefs.standupRange);
   const [turn, setTurn] = useState<number | null>(null);
+  const [full, setFull] = useState(false);
+  // Full screen also asks the browser for it; leaving the browser's full screen (Esc) leaves ours too.
+  const toggleFull = () => {
+    const next = !full;
+    setFull(next);
+    try {
+      if (next) void document.documentElement.requestFullscreen?.().catch(() => {});
+      else if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    } catch { /* not allowed here; the in-page full screen still works */ }
+  };
+  useEffect(() => {
+    if (!full || turn !== null) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target instanceof HTMLTextAreaElement)) setFull(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, turn]);
+  useEffect(() => {
+    const onChange = () => { if (!document.fullscreenElement) setFull(false); };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
 
   const ws = board.workspaces.find((w) => w.store.id === scope.workspaceId) ?? board.workspaces[0];
   const history = useHistory(ws?.store.id, ws?.tree ? [ws.tree.outputFolder] : [], 200);
@@ -216,30 +245,32 @@ export function StandupView() {
   const current = turn !== null && !wrapUp ? members[turn] : undefined;
 
   return (
-    <div className="flex flex-col gap-5 pb-6">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={cn('flex h-full min-h-[520px] flex-col gap-4', full && 'fixed inset-0 z-50 min-h-0 bg-background p-5')}>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {full && <h2 className="mr-2 max-w-md truncate font-semibold" title={ws?.store.label}>Stand-up · {ws?.store.label}</h2>}
         <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
           {SINCE.map((s) => (
             <button key={s.id} type="button" onClick={() => setSince(s.id)} className={cn('h-7 rounded-md px-2.5 text-xs', since === s.id ? 'bg-background font-medium shadow-xs' : 'text-muted-foreground hover:text-foreground')}>{s.label}</button>
           ))}
         </div>
         <span className="text-xs text-muted-foreground">since {cutoff.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {notesPath && <span className="text-xs text-muted-foreground" title={notesPath}>{dirty ? 'Unsaved notes' : savedNotes ? 'Notes saved' : ''}</span>}
           {canSave && <Button size="sm" variant="outline" disabled={!dirty} onClick={() => void saveNotes()}><Save />Save notes</Button>}
           <Button size="sm" variant="outline" onClick={() => void copyNotes()}><ClipboardCopy />Copy notes</Button>
           {running
             ? <Button size="sm" variant="outline" onClick={() => setTurn(null)}><Square />End stand-up</Button>
             : <Button size="sm" disabled={members.length === 0} onClick={() => setTurn(0)}><Play />Run stand-up</Button>}
+          <Button size="icon-sm" variant="ghost" aria-label={full ? 'Leave full screen' : 'Full screen'} title={full ? 'Leave full screen' : 'Full screen'} onClick={toggleFull}>{full ? <Minimize2 /> : <Maximize2 />}</Button>
         </div>
       </div>
 
-      {history === null && <p className="text-xs text-muted-foreground">Loading git activity…</p>}
-      {history !== null && !ws?.store.source.history && <p className="text-xs text-muted-foreground">"Done since" needs git history, from the local server or a GitHub repo. Open folders show current work only.</p>}
+      {history === null && <p className="shrink-0 text-xs text-muted-foreground">Loading git activity…</p>}
+      {history !== null && !ws?.store.source.history && <p className="shrink-0 text-xs text-muted-foreground">"Done since" needs git history, from the local server or a GitHub repo. Open folders show current work only.</p>}
 
       {running ? (
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-          <div className="flex items-center gap-2">
+        <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4">
+          <div className="flex shrink-0 items-center gap-2">
             <Button size="icon-sm" variant="ghost" aria-label="Previous" disabled={turn === 0} onClick={() => setTurn((t) => Math.max((t ?? 0) - 1, 0))}><ChevronLeft /></Button>
             <div className="flex flex-1 items-center justify-center gap-1.5">
               {[...members, null].map((m, i) => (
@@ -249,37 +280,39 @@ export function StandupView() {
             <span className="w-12 text-right font-mono text-xs tabular-nums text-muted-foreground">{clock}</span>
             <Button size="icon-sm" variant="ghost" aria-label="Next" disabled={wrapUp} onClick={() => setTurn((t) => Math.min((t ?? 0) + 1, members.length))}><ChevronRight /></Button>
           </div>
-          {current && <MemberCard m={current} focused big note={noteFor(current.id)} onNote={setNoteFor(current.id)} />}
+          {current && <MemberCard m={current} focused big className="flex-1" note={noteFor(current.id)} onNote={setNoteFor(current.id)} />}
           {wrapUp && <WrapUp unowned={report.unowned} upForGrabs={report.upForGrabs} big team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />}
-          <p className="text-center text-xs text-muted-foreground">← → to move between people · Esc to end</p>
+          <p className="shrink-0 text-center text-xs text-muted-foreground">← → to move between people · Esc to end</p>
         </div>
       ) : (
-        <>
-          {members.length === 0 && <p className="text-sm text-muted-foreground">No one holds a ticket or committed since then. Assign tickets in the ticket sheet to see people here.</p>}
-          <div className="grid content-start gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {members.map((m) => <MemberCard key={m.id} m={m} note={noteFor(m.id)} onNote={setNoteFor(m.id)} />)}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto md:flex-row md:overflow-hidden">
+          <div className="flex shrink-0 flex-col gap-3 md:min-h-0 md:flex-1 md:shrink md:flex-row md:overflow-x-auto md:pb-1" data-slot="standup-members">
+            {members.length === 0 && <p className="text-sm text-muted-foreground">No one holds a ticket or committed since then. Assign tickets in the ticket sheet to see people here.</p>}
+            {members.map((m) => <MemberCard key={m.id} m={m} className="max-h-[70vh] shrink-0 md:max-h-none md:w-80" note={noteFor(m.id)} onNote={setNoteFor(m.id)} />)}
           </div>
-          <WrapUp unowned={report.unowned} upForGrabs={report.upForGrabs} team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />
-        </>
+          <WrapUp side unowned={report.unowned} upForGrabs={report.upForGrabs} team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />
+        </div>
       )}
     </div>
   );
 }
 
-function WrapUp({ unowned, upForGrabs, big, team, onTeam }: { unowned: Ticket[]; upForGrabs: Ticket[]; big?: boolean; team: string; onTeam: (v: string) => void }) {
+function WrapUp({ unowned, upForGrabs, big, side, team, onTeam }: { unowned: Ticket[]; upForGrabs: Ticket[]; big?: boolean; side?: boolean; team: string; onTeam: (v: string) => void }) {
   return (
-    <section className={cn('grid gap-4 rounded-xl border border-dashed border-border p-4', !big && 'md:grid-cols-2', big && 'p-6')}>
-      <Section title="Needs an owner" tone="text-warning" empty="Every built or blocked ticket has someone.">
-        {unowned.map((t) => <TicketLine key={t.uid} ticket={t} note={t.leaf.plan?.blockedAt ? `Blocked: ${t.leaf.plan.blockedReason ?? ''}` : 'Built, waiting for review'} />)}
-      </Section>
-      <Section title="Up for grabs" tone="text-success" empty="No unassigned ready tickets.">
-        {upForGrabs.map((t) => <TicketLine key={t.uid} ticket={t} />)}
-      </Section>
-      <div className={cn('flex flex-col gap-1', !big && 'md:col-span-2')}>
-        <h4 className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Team notes</h4>
-        <NoteBox value={team} onChange={onTeam} rows={big ? 4 : 2} placeholder="Decisions, follow-ups, who pairs with whom…" />
+    <section className={cn('flex min-h-0 flex-col rounded-xl border border-dashed border-border', side && 'shrink-0 md:w-80', big && 'flex-1')}>
+      <div className={cn('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4', big && 'p-6')}>
+        <Section title="Needs an owner" tone="text-warning" empty="Every built or blocked ticket has someone.">
+          {unowned.map((t) => <TicketLine key={t.uid} ticket={t} note={t.leaf.plan?.blockedAt ? `Blocked: ${t.leaf.plan.blockedReason ?? ''}` : 'Built, waiting for review'} />)}
+        </Section>
+        <Section title="Up for grabs" tone="text-success" empty="No unassigned ready tickets.">
+          {upForGrabs.map((t) => <TicketLine key={t.uid} ticket={t} />)}
+        </Section>
+        {big && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Hand className="size-3.5" />Pick owners, then end the stand-up. <CheckCheck className="size-3.5" /></p>}
       </div>
-      {big && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Hand className="size-3.5" />Pick owners, then end the stand-up. <CheckCheck className="size-3.5" /></p>}
+      <div className={cn('flex shrink-0 flex-col gap-1 border-border border-t border-dashed p-3', big && 'px-6 py-4')}>
+        <h4 className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Team notes</h4>
+        <NoteBox value={team} onChange={onTeam} rows={big ? 4 : 3} placeholder="Decisions, follow-ups, who pairs with whom…" />
+      </div>
     </section>
   );
 }

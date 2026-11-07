@@ -24,7 +24,7 @@ export function Header() {
 
   return (
     <header className="flex flex-col gap-3 border-border border-b px-5 py-3">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <nav className="flex min-w-0 items-center gap-1.5 text-sm">
           {crumbs.map((c, i) => (
             <span key={`${c}-${i}`} className="flex min-w-0 items-center gap-1.5">
@@ -41,8 +41,8 @@ export function Header() {
           <Button size="sm" onClick={() => setDialog('new-ticket')}><Plus />New ticket</Button>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5">
           {VIEWS.map((v) => (
             <button key={v.id} type="button" onClick={() => setView(v.id)} className={cn('flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors', view === v.id ? 'bg-background font-medium shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
               <v.icon className="size-3.5" />{v.label}

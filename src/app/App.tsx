@@ -54,7 +54,13 @@ function Shell() {
   useShortcuts(state, useCallback(() => setHelp(true), []));
   return (
     <div className="flex h-dvh bg-sidebar">
-      {preferences.prefs.sidebarOpen ? <AppSidebar /> : <SidebarRail />}
+      {/* On a phone the sidebar would take the whole screen, so it starts folded there. */}
+      {preferences.prefs.sidebarOpen ? (
+        <>
+          <div className="contents max-md:hidden"><AppSidebar /></div>
+          <div className="contents md:hidden"><SidebarRail /></div>
+        </>
+      ) : <SidebarRail />}
       <main className="my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs">
         {connected && expanded && selected ? <TicketPage /> : connected ? (
           <>
