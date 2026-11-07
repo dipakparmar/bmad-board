@@ -2,6 +2,9 @@
 # Installs the bmad-board executable from the latest GitHub release.
 #
 #   curl -fsSL https://raw.githubusercontent.com/dipakparmar/bmad-board/main/install.sh | sh
+#   gh api repos/dipakparmar/bmad-board/contents/install.sh -H 'Accept: application/vnd.github.raw' | sh
+#
+# While the repo is private, the second form works: it and the download below use your `gh` login.
 #
 # BMAD_BOARD_VERSION=v0.2.0 picks a release; BMAD_BOARD_INSTALL_DIR picks the folder
 # (default /usr/local/bin when writable, else ~/.local/bin).
@@ -37,8 +40,14 @@ mkdir -p "$dir"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 echo "Downloading $asset…"
-curl -fsSL "$base/$asset" -o "$tmp/$asset"
-if curl -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt" 2>/dev/null; then
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  # gh reaches private repos too.
+  gh release download ${BMAD_BOARD_VERSION:-} -R "$repo" -p "$asset" -p checksums.txt -D "$tmp"
+else
+  curl -fsSL "$base/$asset" -o "$tmp/$asset"
+  curl -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt" 2>/dev/null || true
+fi
+if [ -s "$tmp/checksums.txt" ]; then
   want="$(grep " $asset\$" "$tmp/checksums.txt" | cut -d' ' -f1)"
   got="$( (sha256sum "$tmp/$asset" 2>/dev/null || shasum -a 256 "$tmp/$asset") | cut -d' ' -f1)"
   if [ -n "$want" ] && [ "$want" != "$got" ]; then echo "bmad-board: checksum mismatch for $asset" >&2; exit 1; fi

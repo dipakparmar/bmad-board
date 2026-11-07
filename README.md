@@ -13,6 +13,12 @@ curl -fsSL https://raw.githubusercontent.com/dipakparmar/bmad-board/main/install
 cd ~/code/my-project && bmad-board
 ```
 
+While the repo is private, install with your `gh` login instead (the script then downloads with `gh` too):
+
+```sh
+gh api repos/dipakparmar/bmad-board/contents/install.sh -H 'Accept: application/vnd.github.raw' | sh
+```
+
 It serves the current folder on <http://127.0.0.1:33714> (or the next free port) and opens your browser. `bmad-board ~/code/other`, `--port 4000` and `--no-open` do what they say; `bmad-board --help` lists the rest. Builds exist for macOS and Linux on arm64 and x64; the script picks yours, checks its checksum, and installs to `/usr/local/bin` when writable, else `~/.local/bin` (`BMAD_BOARD_INSTALL_DIR` and `BMAD_BOARD_VERSION=v0.2.0` change that). You can also download a `.tar.gz` from [Releases](https://github.com/dipakparmar/bmad-board/releases) yourself. It needs `git` on the machine for history and commits, and `gh` only for the GitHub sign-in.
 
 To build it yourself: `bun run build:cli` (this machine) or `bun scripts/build-cli.ts --all`, which writes `release/bmad-board-<os>-<arch>`. Pushing a `v*` tag builds all four, signs the macOS ones, smoke-tests them, and attaches them to a GitHub release.
