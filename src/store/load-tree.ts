@@ -16,6 +16,7 @@ import {
   type Epic,
   type Initiative,
   type Leaf,
+  type LeafLinks,
   type LeafStatus,
   type LeafType,
   type Plan,
@@ -26,6 +27,7 @@ import {
 } from '../domain';
 import { flag, list, parseFrontmatter, str } from './frontmatter';
 import { DOC_KIND_LABELS, docKind, docLinks, type DocLink } from '../domain/docs';
+import { frontmatterDependencies, proseDependencies, type ProseRef } from '../domain/prose-deps';
 import { joinPath, type FileSource } from './file-source';
 import { loadV6Tree } from './load-v6';
 
@@ -97,6 +99,10 @@ export async function readBoardConfig(src: FileSource, problems: string[] = []):
 /** A leaf before its `after` refs are resolved. */
 interface RawLeaf extends Omit<Leaf, 'after' | 'gatedBy' | 'drift'> {
   rawAfter: unknown[];
+  /** Prerequisites named in its text, resolved once every ticket is known. */
+  prose?: ProseRef[];
+  /** Entry before it in tickets.toml. */
+  previousId?: string;
   entryAfter?: unknown[];
   entryHitl?: boolean;
   fileName?: string;
@@ -143,9 +149,11 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
       continue;
     }
     if (!LEAF_TYPES.includes(entry.type)) problems.push(`${dir}/tickets.toml: entry ${id} type ${entry.type} is not story, spike or bug`);
+    const previousId = [...rows.keys()].at(-1);
     rows.set(String(id), {
       key: `${folder}/${id}`, id, type: entry.type, title: entry.title, folder, dir, initiative, entry,
-      hitl: entry.hitl, risk: entry.risk, status: '', state: 'backlog', rawAfter: entry.after,
+      hitl: entry.hitl, risk: entry.risk, status: '', state: 'backlog', rawAfter: entry.after, previousId,
+      prose: entry.notes?.flatMap((n) => proseDependencies(n)),
     });
   }
   const extra: RawLeaf[] = [];
@@ -180,6 +188,7 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
     row.risk = (str(data.risk) || row.risk) as Risk | undefined;
     row.status = leafStatus(data.status, path, problems);
     row.rawAfter = list(data.after);
+    row.prose = [...(row.prose ?? []), ...proseDependencies(body), ...frontmatterDependencies(data)];
     if (str(data.tracker_id)) row.tracker = { trackerId: str(data.tracker_id), remote: str(data.remote), trackerStatus };
     if (row.entry && unknown) row.entry = { ...row.entry, unknown };
     else if (!row.entry && unknown) row.entry = { id: row.id ?? name, type: row.type, title: row.title, description: '', covers: [], after: [], hitl: row.hitl, unknown, refine: true };
@@ -250,7 +259,7 @@ function resolveAfter(raws: RawLeaf[], epicIds: Map<string, string>, epicSlugs: 
   const trackerIds = new Map<string, TicketKey>();
   for (const r of raws) if (r.tracker?.trackerId) trackerIds.set(r.tracker.trackerId.toLowerCase(), r.key);
 
-  return (folder: string | null, refs: unknown[], where: string): TicketKey[] => {
+  return (folder: string | null, refs: unknown[], where: string, quiet = false): TicketKey[] => {
     const keys: TicketKey[] = [];
     for (const ref of refs) {
       const text = str(ref).trim();
@@ -266,7 +275,7 @@ function resolveAfter(raws: RawLeaf[], epicIds: Map<string, string>, epicSlugs: 
       if (!key) key = trackerIds.get(text.toLowerCase());
       if (!key && folder) key = raws.find((r) => r.folder === folder && r.fileName === (text.endsWith('.md') ? text : `${text}.md`))?.key;
       if (!key) {
-        problems.push(`${where}: after ${JSON.stringify(ref)} matches no ticket`);
+        if (!quiet) problems.push(`${where}: after ${JSON.stringify(ref)} matches no ticket`);
         continue;
       }
       if (!keys.includes(key)) keys.push(key);
@@ -275,11 +284,24 @@ function resolveAfter(raws: RawLeaf[], epicIds: Map<string, string>, epicSlugs: 
   };
 }
 
-function finish(raws: RawLeaf[], resolve: ReturnType<typeof resolveAfter>, gates: Map<string, TicketKey[]>): Leaf[] {
-  return raws.map(({ rawAfter, entryAfter, entryHitl, fileName: _f, ...rest }) => {
+/** A ref written in words, as `after` would write it: `1.2`, a sibling id, `epic-x`, a file name. */
+function proseToRaw(r: ProseRef, epicIds: Map<string, string>): unknown {
+  if (r.kind === 'story') return `${r.epic}.${r.story}`;
+  if (r.kind === 'sibling') return Number(r.id);
+  if (r.kind === 'epic') return epicIds.get(r.id) ?? `epic-${r.id}`;
+  return r.name;
+}
+
+function finish(raws: RawLeaf[], resolve: ReturnType<typeof resolveAfter>, gates: Map<string, TicketKey[]>, epicIds = new Map<string, string>(), epicLinks = new Map<string, LeafLinks>()): Leaf[] {
+  return raws.map(({ rawAfter, entryAfter, entryHitl, fileName: _f, prose, previousId, ...rest }) => {
     const where = rest.file?.path ?? `${rest.dir}/tickets.toml entry ${rest.id}`;
     const after = resolve(rest.folder, rawAfter, where);
     const leaf: Leaf = { ...rest, after, gatedBy: gates.get(rest.folder) ?? [] };
+    const noted = resolve(rest.folder, (prose ?? []).map((r) => proseToRaw(r, epicIds)), where, true).filter((k) => k !== rest.key && !after.includes(k));
+    const links: LeafLinks = { ...epicLinks.get(rest.folder) };
+    if (noted.length) links.noted = noted;
+    if (previousId !== undefined) links.previous = `${rest.folder}/${previousId}`;
+    if (Object.keys(links).length) leaf.links = links;
     if (entryAfter) {
       const planned = resolve(rest.folder, entryAfter, where);
       const drift: NonNullable<Leaf['drift']> = {};
@@ -337,7 +359,24 @@ async function loadInitiative(src: FileSource, dir: string, slug: string, proble
   const resolve = resolveAfter(raws, epicIds, new Set(children), problems);
   const gates = new Map<string, TicketKey[]>();
   for (const [epicSlug, { file }] of epicFiles) gates.set(epicSlug, file ? resolve(null, list(file.data.after), file.path) : []);
-  const leaves = finish(raws, resolve, gates);
+  // The epic's place in build order, its declared `after` in tickets.toml, and what its text says it waits on.
+  const epicLinks = new Map<string, LeafLinks>();
+  children.forEach((epicSlug, i) => {
+    const table = listed.find((e) => str(e.slug) === epicSlug);
+    const file = epicFiles.get(epicSlug)?.file;
+    const declared = containerAfter(table?.after).map((a) => ('epic' in a ? a.epic : '')).map((e) => epicIds.get(String(toId(e))) ?? str(e)).filter((e) => children.includes(e) && e !== epicSlug);
+    const prose = file ? [...proseDependencies(file.body), ...frontmatterDependencies(file.data)] : [];
+    const gated = gates.get(epicSlug) ?? [];
+    const noted = resolve(null, prose.map((r) => proseToRaw(r, epicIds)), file?.path ?? epicSlug, true)
+      .filter((k) => k !== epicSlug && !k.startsWith(`${epicSlug}/`) && !gated.includes(k) && !declared.includes(k));
+    const links: LeafLinks = {};
+    if (declared.length) links.epicAfter = declared.filter((d) => !gated.includes(d));
+    if (!links.epicAfter?.length) delete links.epicAfter;
+    if (noted.length) links.epicNoted = noted;
+    if (i > 0 && children[i - 1]) links.previousEpic = children[i - 1];
+    epicLinks.set(epicSlug, links);
+  });
+  const leaves = finish(raws, resolve, gates, epicIds, epicLinks);
 
   base.epics = children.map((epicSlug): Epic => {
     const { file, dir: epicDir } = epicFiles.get(epicSlug) ?? { file: null, dir: '' };

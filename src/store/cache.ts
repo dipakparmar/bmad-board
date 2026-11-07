@@ -92,6 +92,42 @@ export async function cacheSet(key: string, value: unknown): Promise<void> {
   });
 }
 
+/** How many entries the cache holds, and roughly how much this site stores in the browser. */
+export async function cacheStats(): Promise<{ entries: number; bytes?: number }> {
+  const db = await open();
+  const entries = db
+    ? await new Promise<number>((resolve) => {
+        try {
+          const req = db.transaction(STORE).objectStore(STORE).count();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(memory.size);
+        } catch {
+          resolve(memory.size);
+        }
+      })
+    : memory.size;
+  const estimate = await navigator.storage?.estimate?.().catch(() => undefined);
+  return { entries, bytes: estimate?.usage };
+}
+
+/** Drops every cached file and board, in memory and in IndexedDB. The next load reads everything again. */
+export async function clearCache(): Promise<void> {
+  memory.clear();
+  const db = await open();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
 /** Forgets everything in memory (tests); the IndexedDB copy stays. */
 export function clearMemoryCache() {
   memory.clear();

@@ -29,22 +29,44 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Relations({ ticket }: { ticket: Ticket }) {
   const { tickets, select } = useBoardContext();
   const peers = tickets.filter((t) => t.workspaceId === ticket.workspaceId);
-  const waitsOn = ticket.leaf.after.map((k) => peers.find((t) => t.leaf.key === k));
-  const blocks = peers.filter((t) => t.leaf.after.includes(ticket.leaf.key));
-  const gates = ticket.leaf.gatedBy;
-  if (!waitsOn.length && !blocks.length && !gates.length) return null;
-  const item = (t: Ticket | undefined, key: string) => (
-    <button key={key} type="button" disabled={!t} onClick={() => t && select(t.uid)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent disabled:cursor-default">
-      {t ? <StateIcon state={t.leaf.state} className="size-3.5" /> : null}
-      <span className="w-10 shrink-0 font-mono text-[11px] text-board-id">{t?.ref ?? refOf(key, peers)}</span>
-      <span className="truncate">{t?.leaf.title ?? key}</span>
-    </button>
-  );
+  const find = (k: string) => peers.find((t) => t.leaf.key === k);
+  const links = ticket.leaf.links ?? {};
+  const waitsOn = ticket.leaf.after;
+  const noted = links.noted ?? [];
+  const blocks = peers.filter((t) => t.leaf.after.includes(ticket.leaf.key) || t.leaf.links?.noted?.includes(ticket.leaf.key));
+  const epicWaits = [...ticket.leaf.gatedBy, ...(links.epicAfter ?? []), ...(links.epicNoted ?? [])];
+  const previous = links.previous ? find(links.previous) : undefined;
+  const following = peers.find((t) => t.leaf.links?.previous === ticket.leaf.key);
+  if (!waitsOn.length && !noted.length && !blocks.length && !epicWaits.length && !previous && !following) return null;
+  const item = (key: string, note?: string) => {
+    const t = find(key);
+    return (
+      <button key={key} type="button" disabled={!t} onClick={() => t && select(t.uid)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent disabled:cursor-default">
+        {t ? <StateIcon state={t.leaf.state} className="size-3.5" /> : null}
+        <span className="w-10 shrink-0 font-mono text-[11px] text-board-id">{t?.ref ?? refOf(key, peers)}</span>
+        <span className="min-w-0 flex-1 truncate">{t?.leaf.title ?? key}</span>
+        {note && <span className="shrink-0 text-[11px] text-muted-foreground">{note}</span>}
+      </button>
+    );
+  };
+  const group = (label: string, keys: string[], note?: (k: string) => string | undefined) =>
+    keys.length > 0 && <div className="mb-3"><div className="mb-1 text-xs text-muted-foreground">{label}</div>{keys.map((k) => item(k, note?.(k)))}</div>;
+  const epicTitle = (k: string) => {
+    const leaf = peers.find((t) => t.leaf.folder === k);
+    return leaf ? `epic ${leaf.ref.split('.')[0]}` : undefined;
+  };
   return (
     <Section title="Relations">
-      {waitsOn.length > 0 && <div className="mb-3"><div className="mb-1 text-xs text-muted-foreground">Waits on</div>{waitsOn.map((t, i) => item(t, ticket.leaf.after[i] ?? String(i)))}</div>}
-      {gates.length > 0 && <div className="mb-3"><div className="mb-1 text-xs text-muted-foreground">Its epic waits for these epics to be done</div>{gates.map((g) => <div key={g} className="px-2 py-1 font-mono text-xs">{g}</div>)}</div>}
-      {blocks.length > 0 && <div><div className="mb-1 text-xs text-muted-foreground">Blocks</div>{blocks.map((t) => item(t, t.uid))}</div>}
+      {group('Waits on', waitsOn)}
+      {group('Its text names these as prerequisites', noted, () => 'from the text')}
+      {epicWaits.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-xs text-muted-foreground">Its epic waits on</div>
+          {[...new Set(epicWaits)].map((g) => (find(g) ? item(g) : <div key={g} className="flex items-center gap-2 px-2 py-1 text-sm"><span className="font-mono text-xs">{g}</span>{epicTitle(g) && <span className="text-[11px] text-muted-foreground">{epicTitle(g)}{ticket.leaf.gatedBy.includes(g) ? ' · must be done first' : ''}</span>}</div>))}
+        </div>
+      )}
+      {group('Blocks', blocks.map((t) => t.leaf.key))}
+      {(previous || following) && group('Build order', [previous?.leaf.key, following?.leaf.key].filter((k): k is string => !!k), (k) => (k === previous?.leaf.key ? (links.sequential ? 'before it, must be done first' : 'before it') : 'after it'))}
     </Section>
   );
 }

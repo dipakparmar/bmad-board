@@ -17,6 +17,10 @@ risk: medium
 
 Adds code validation to the pricing call and shows the refusal reason at checkout.
 
+## Dependencies
+
+- Story 1.3, for the tax rules the refusal message quotes.
+
 ## Requirements
 
 1. **Valid code lowers the total** (R2)

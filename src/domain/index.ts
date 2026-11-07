@@ -10,3 +10,4 @@ export * from './graph';
 export * from './board-config';
 export * from './docs';
 export * from './sprint-v6';
+export * from './prose-deps';

@@ -27,6 +27,8 @@ As a user, I want to edit my profile, so that my details are current.
 ### Story 1.4: Delete account
 As a user, I want to delete my account, so that my data is gone.
 
+**Prerequisites:** Story 1.1
+
 ## Epic 2: Orders
 People can see what they ordered.
 

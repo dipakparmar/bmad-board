@@ -2,7 +2,8 @@
  * Settings, in two scopes like Kaneo's: "You" (display preferences, kept in this browser) and
  * "Project" (team settings committed to `_bmad/custom/bmad-board.toml`, shared with everyone and every agent).
  */
-import { RotateCcw, Save } from 'lucide-react';
+import { DatabaseZap, RotateCcw, Save } from 'lucide-react';
+import { toast } from 'sonner';
 import { useEffect, useState, type ReactNode } from 'react';
 import { applyWithToast } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
@@ -12,6 +13,7 @@ import { BOARD_CONFIG_PATH, DEFAULT_BOARD_CONFIG, type BoardConfig } from '@/dom
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { cacheStats } from '@/store';
 import { cn } from '@/lib/cn';
 import { TaskCardBody } from '../board/task-card';
 import { ShortcutsList } from '../dialogs/shortcuts-dialog';
@@ -169,6 +171,30 @@ function ProjectSettings() {
   );
 }
 
+function CacheSettings() {
+  const { board } = useBoardContext();
+  const [stats, setStats] = useState<{ entries: number; bytes?: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void cacheStats().then(setStats);
+  }, []);
+  const clear = async () => {
+    setBusy(true);
+    await board.clearCacheAndReload();
+    setStats(await cacheStats());
+    setBusy(false);
+    toast.success('Cache cleared; every project was read again');
+  };
+  const size = stats?.bytes ? ` · about ${(stats.bytes / 1_048_576).toFixed(1)} MB stored by this site` : '';
+  return (
+    <Card title="Browser cache" description="Files are kept by their git hash, so a reload only fetches what changed. Clear it if the board ever looks out of date.">
+      <Row label="Cached files and boards" help={stats ? `${stats.entries.toLocaleString()} entries${size}` : 'Counting…'}>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void clear()}><DatabaseZap />{busy ? 'Clearing…' : 'Clear cache and reload'}</Button>
+      </Row>
+    </Card>
+  );
+}
+
 export function SettingsView() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 pb-10">
@@ -178,6 +204,7 @@ export function SettingsView() {
       </div>
       <YouSettings />
       <ProjectSettings />
+      <CacheSettings />
       <Card title="Keyboard shortcuts" description="Press ? anywhere to see these."><div className="px-5 py-4"><ShortcutsList /></div></Card>
     </div>
   );

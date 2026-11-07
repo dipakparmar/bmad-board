@@ -110,6 +110,8 @@ export interface Leaf {
   after: TicketKey[];
   /** The epic's own `after`: waits for those epics to be done. */
   gatedBy: TicketKey[];
+  /** Links beyond `after` and gates, for the graph and the ticket panel. */
+  links?: LeafLinks;
   hitl: boolean;
   risk?: Risk;
   status: LeafStatus | '';
@@ -118,6 +120,25 @@ export interface Leaf {
   docs?: DocLink[];
   /** Entry and file disagree on `after` or `hitl`. */
   drift?: { after?: { file: TicketKey[]; entry: TicketKey[] }; hitl?: { file: boolean; entry: boolean } };
+}
+
+/**
+ * How a ticket connects besides its `after`. BMAD's readiness uses only `after` and epic gates, so these
+ * are shown, not enforced (except `sequential`, v6's one-story-after-another rule).
+ */
+export interface LeafLinks {
+  /** Prerequisites its text names ("Prerequisites: Story 1.2", a Dependencies section, `depends_on`). */
+  noted?: TicketKey[];
+  /** The ticket before it in build order (tickets.toml table order; v6 story order). */
+  previous?: TicketKey;
+  /** The previous ticket must be done first (v6 builds an epic's stories in order). */
+  sequential?: boolean;
+  /** Epics (or tickets) its epic is declared after in the initiative's tickets.toml. */
+  epicAfter?: TicketKey[];
+  /** Epics (or tickets) its epic's text says it waits on ("Waits on epic-x because: …"). */
+  epicNoted?: TicketKey[];
+  /** The epic before its epic in build order. */
+  previousEpic?: TicketKey;
 }
 
 /** Initiative or epic: a spec at its level, with requirements its children are cut from. */

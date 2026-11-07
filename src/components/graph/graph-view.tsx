@@ -96,8 +96,8 @@ function DependencyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
         id={id}
         path={path}
         markerEnd={markerEnd}
-        style={{ strokeWidth: on ? 2 : 1.25, strokeDasharray: data?.kind === 'gate' ? '5 4' : undefined, opacity: data?.dim ? 0.2 : 1 }}
-        className={on ? '!stroke-primary' : '!stroke-muted-foreground/60'}
+        style={{ strokeWidth: on ? 2 : 1.25, strokeDasharray: data ? EDGE_DASH[data.kind] : undefined, opacity: data?.dim ? 0.2 : data?.kind === 'order' && !on ? 0.55 : 1 }}
+        className={on ? '!stroke-primary' : data ? EDGE_STROKE[data.kind] : ''}
       />
       {selected && data?.removable && (
         <EdgeLabelRenderer>
@@ -115,6 +115,19 @@ function DependencyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
       )}
     </>
   );
+}
+
+const EDGE_DASH: Record<GraphEdge['kind'], string | undefined> = { after: undefined, gate: '6 4', noted: undefined, order: '1.5 4' };
+const EDGE_STROKE: Record<GraphEdge['kind'], string> = {
+  after: '!stroke-muted-foreground/70', gate: '!stroke-muted-foreground/70', noted: '!stroke-info', order: '!stroke-muted-foreground/60',
+};
+
+const SAMPLE_STROKE: Record<GraphEdge['kind'], string> = {
+  after: 'stroke-muted-foreground', gate: 'stroke-muted-foreground', noted: 'stroke-info', order: 'stroke-muted-foreground/60',
+};
+
+function EdgeSample({ kind }: { kind: GraphEdge['kind'] }) {
+  return <svg width="28" height="6" aria-hidden><line x1="0" y1="3" x2="28" y2="3" className={SAMPLE_STROKE[kind]} strokeWidth="1.5" strokeDasharray={EDGE_DASH[kind]} strokeLinecap="round" /></svg>;
 }
 
 /** A curve through `pts`: straight runs joined by rounded bends, flat where it leaves and enters a card. */
@@ -157,6 +170,8 @@ function Graph() {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const [linkedOnly, setLinkedOnly] = useState(true);
+  const [showOrder, setShowOrder] = useState(false);
+  const [showNoted, setShowNoted] = useState(true);
   const [hover, setHover] = useState<TicketKey | null>(null);
 
   // One project at a time: keys are only unique within a project.
@@ -165,7 +180,7 @@ function Graph() {
   const editable = !!ws && ws.store.capabilities.write && ws.tree?.layout !== 'v6' && ws.tree?.tracker === 'repo';
   const items = useMemo(() => inScope.filter((t) => t.workspaceId === wsId), [inScope, wsId]);
   const byKey = useMemo(() => new Map(items.map((t) => [t.leaf.key, t])), [items]);
-  const g = useMemo(() => dependencyGraph(items, { connectedOnly: linkedOnly }), [items, linkedOnly]);
+  const g = useMemo(() => dependencyGraph(items, { connectedOnly: linkedOnly, order: showOrder, noted: showNoted }), [items, linkedOnly, showOrder, showNoted]);
   const pos = useMemo(() => layout(g.nodes.map((n) => n.key), g.edges), [g]);
 
   const lit = useMemo(() => (hover ? new Set([hover, ...upstreamOf(hover, g.edges), ...downstreamOf(hover, g.edges)]) : null), [hover, g.edges]);
@@ -229,8 +244,10 @@ function Graph() {
     <div className="flex h-full min-h-[480px] flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={linkedOnly} onChange={(e) => setLinkedOnly(e.target.checked)} />Only tickets with dependencies</label>
-        <span className="flex items-center gap-1.5"><svg width="28" height="6" aria-hidden><line x1="0" y1="3" x2="28" y2="3" className="stroke-muted-foreground" strokeWidth="1.5" /></svg>waits on</span>
-        <span className="flex items-center gap-1.5"><svg width="28" height="6" aria-hidden><line x1="0" y1="3" x2="28" y2="3" className="stroke-muted-foreground" strokeWidth="1.5" strokeDasharray="4 3" /></svg>epic gate (waits for the whole epic)</span>
+        <span className="flex items-center gap-1.5" title="`after` in tickets.toml or the ticket's front matter"><EdgeSample kind="after" />waits on</span>
+        <span className="flex items-center gap-1.5" title="The epic's `after`, in its file or in tickets.toml"><EdgeSample kind="gate" />epic waits on epic</span>
+        <label className="flex items-center gap-1.5" title="Prerequisites the ticket's text names: a Dependencies section, a Prerequisites or Depends on line, a Waits on note"><input type="checkbox" checked={showNoted} onChange={(e) => setShowNoted(e.target.checked)} /><EdgeSample kind="noted" />named in the ticket</label>
+        <label className="flex items-center gap-1.5" title="The order tickets and epics are listed in: build order, not a declared prerequisite"><input type="checkbox" checked={showOrder} onChange={(e) => setShowOrder(e.target.checked)} /><EdgeSample kind="order" />build order (inferred)</label>
         <span>{editable ? 'Drag from a ticket’s right dot to another ticket to make it wait. Select an arrow to remove it.' : 'Left to right is build order. Hover a ticket to trace its chain.'}</span>
         {multi && <span className="text-warning">Showing {board.workspaces[0]?.store.label}; pick a project in the sidebar for another.</span>}
       </div>
@@ -238,7 +255,7 @@ function Graph() {
         <p className="flex items-center gap-1.5 text-xs text-destructive"><AlertTriangle className="size-3.5" />These tickets wait on each other in a loop, so none can start: {g.cyclic.join(', ')}</p>
       )}
       {g.nodes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No dependencies here. Tickets get them from <code>after</code> in tickets.toml or a story's front matter{editable ? ', or untick the box above and drag between tickets.' : '.'}</p>
+        <p className="text-sm text-muted-foreground">No dependencies here. Tickets get them from <code>after</code> in tickets.toml or a story's front matter, from a Dependencies section or a Prerequisites line in their text, and from build order{editable ? ', or untick the box above and drag between tickets.' : '.'}</p>
       ) : (
         <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-board-lane">
           <RemoveEdge.Provider value={remove}>

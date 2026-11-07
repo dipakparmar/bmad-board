@@ -8,9 +8,24 @@ import type { AfterRef, Leaf, TicketKey } from './ticket-tree';
 export interface GraphEdge {
   from: TicketKey;
   to: TicketKey;
-  /** `after` between tickets, or an epic gate drawn from the gating epic's last tickets. */
-  kind: 'after' | 'gate';
+  /**
+   * - `after`: a declared prerequisite between tickets;
+   * - `gate`: an epic waits on another (its file's `after`, or its `after` in tickets.toml), drawn from
+   *   the awaited epic's last tickets to the waiting epic's first;
+   * - `noted`: a prerequisite the text names ("Prerequisites: Story 1.2"), not in `after`;
+   * - `order`: build order only (the ticket or epic listed before it), inferred.
+   */
+  kind: EdgeKind;
 }
+
+export type EdgeKind = 'after' | 'gate' | 'noted' | 'order';
+
+export const EDGE_LABELS: Record<EdgeKind, string> = {
+  after: 'Waits on (after)',
+  gate: 'Epic waits on epic',
+  noted: 'Named in the ticket text',
+  order: 'Build order (inferred)',
+};
 
 export interface GraphNode<T> {
   key: TicketKey;
@@ -33,13 +48,16 @@ export interface DependencyGraph<T> {
  * Builds the graph over `items` (any shape carrying a leaf). Prerequisites outside `items` are left out,
  * so a filtered view stays readable. With `connectedOnly`, tickets with no edges are dropped.
  */
-export function dependencyGraph<T extends { leaf: Leaf }>(items: T[], { connectedOnly = false } = {}): DependencyGraph<T> {
+export function dependencyGraph<T extends { leaf: Leaf }>(items: T[], { connectedOnly = false, order = true, noted = true } = {}): DependencyGraph<T> {
   const byKey = new Map(items.map((i) => [i.leaf.key, i]));
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();
   const add = (from: TicketKey, to: TicketKey, kind: GraphEdge['kind']) => {
     const id = `${from}>${to}`;
     if (from === to || seen.has(id) || !byKey.has(from) || !byKey.has(to)) return;
+    // Inferred order never closes a loop: where the text says otherwise, the text wins.
+    if (kind === 'order' && downstreamOf(to, edges).has(from)) return;
+    if (kind === 'order' && downstreamOf(from, edges).has(to)) return;
     seen.add(id);
     edges.push({ from, to, kind });
   };
@@ -49,15 +67,34 @@ export function dependencyGraph<T extends { leaf: Leaf }>(items: T[], { connecte
   // epic's first tickets, rather than every pair, which would be unreadable.
   const byFolder = new Map<string, T[]>();
   for (const i of items) byFolder.set(i.leaf.folder, [...(byFolder.get(i.leaf.folder) ?? []), i]);
+  // Inside an epic, build order counts as a link when it is shown, so its last ticket is the one listed last.
+  const inside = (o: Leaf, k: TicketKey) => o.after.includes(k) || (order && o.links?.previous === k);
   const lastOf = (folder: string) => {
     const inFolder = byFolder.get(folder) ?? [];
-    const keys = new Set(inFolder.map((i) => i.leaf.key));
-    return inFolder.filter((i) => !inFolder.some((o) => o.leaf.after.includes(i.leaf.key) && keys.has(o.leaf.key)));
+    return inFolder.filter((i) => !inFolder.some((o) => inside(o.leaf, i.leaf.key)));
   };
+  const firstsOf = (folder: string) => {
+    const inFolder = byFolder.get(folder) ?? [];
+    return inFolder.filter((i) => !inFolder.some((o) => inside(i.leaf, o.leaf.key)));
+  };
+  // An epic-level link is one arrow per pair of epics, from the awaited epic's last ticket in build order
+  // to the waiting epic's first. Every last-to-every-first would swamp a big project.
+  const sources = (ref: TicketKey) => (byFolder.has(ref) ? lastOf(ref).slice(-1).map((i) => i.leaf.key) : [ref]);
   for (const [folder, inFolder] of byFolder) {
-    const gates = inFolder[0]?.leaf.gatedBy ?? [];
-    const firsts = inFolder.filter((i) => !i.leaf.after.some((a) => byFolder.get(folder)?.some((o) => o.leaf.key === a)));
-    for (const g of gates) for (const from of lastOf(g)) for (const to of firsts) add(from.leaf.key, to.leaf.key, 'gate');
+    const lead = inFolder[0]?.leaf;
+    const firsts = firstsOf(folder).slice(0, 1).map((i) => i.leaf.key);
+    const epicEdges = (refs: TicketKey[] | undefined, kind: EdgeKind) => {
+      for (const g of refs ?? []) for (const from of sources(g)) for (const to of firsts) add(from, to, kind);
+    };
+    epicEdges(lead?.gatedBy, 'gate');
+    epicEdges(lead?.links?.epicAfter, 'gate');
+    if (noted) epicEdges(lead?.links?.epicNoted, 'noted');
+  }
+  if (noted) for (const i of items) for (const k of i.leaf.links?.noted ?? []) add(k, i.leaf.key, 'noted');
+  if (order) {
+    // Build order last, so it only fills in where nothing stronger connects the pair. Within an epic only:
+    // chaining epics end to start would line the whole project up in one row.
+    for (const i of items) if (i.leaf.links?.previous) add(i.leaf.links.previous, i.leaf.key, 'order');
   }
 
   const connected = new Set(edges.flatMap((e) => [e.from, e.to]));

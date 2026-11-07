@@ -1,7 +1,7 @@
 /** Board state: the connected projects, their loaded trees, and writes through each project's store. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeAuthor, ChangeResult, TicketChange, TicketTree } from '../domain';
-import { FileTicketStore, GitHubSource, LocalServerSource, probeLocalServer, type FileSource, type GitHubTarget } from '../store';
+import { clearCache, FileTicketStore, GitHubSource, LocalServerSource, probeLocalServer, type FileSource, type GitHubTarget } from '../store';
 
 export interface Workspace {
   store: FileTicketStore;
@@ -141,5 +141,14 @@ export function useBoard() {
     };
   }, [add]);
 
-  return { workspaces, add, remove, reload, apply, patch, serverAvailable };
+  /** Empties the browser cache, then reloads every project from scratch. */
+  const clearCacheAndReload = useCallback(async () => {
+    await clearCache();
+    await Promise.all(workspaces.map((w) => {
+      (w.store.source as { invalidate?: () => void }).invalidate?.();
+      return reload(w.store);
+    }));
+  }, [workspaces, reload]);
+
+  return { workspaces, add, remove, reload, apply, patch, serverAvailable, clearCacheAndReload };
 }

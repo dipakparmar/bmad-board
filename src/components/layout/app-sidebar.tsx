@@ -1,5 +1,5 @@
 /** Projects → initiatives → epics, like Kaneo's workspace/project sidebar. */
-import { FolderOpen, GitBranch, Github, Inbox, KanbanSquare, Layers, LogOut, PanelLeftClose, PanelLeftOpen, RefreshCw, Server, Settings, Target } from 'lucide-react';
+import { DatabaseZap, FolderOpen, GitBranch, Github, Inbox, KanbanSquare, Layers, LogOut, PanelLeftClose, PanelLeftOpen, RefreshCw, Server, Settings, Target } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useBoardContext, type Scope } from '@/app/board-context';
@@ -37,7 +37,7 @@ function splitLabel(label: string): { name: string; branch?: string } {
   return i < 0 ? { name: label } : { name: label.slice(0, i), branch: label.slice(i + 3) };
 }
 
-function WorkspaceHeader({ w, onSelect, onReload, onRemove }: { w: Workspace; onSelect: () => void; onReload: () => void; onRemove: () => void }) {
+function WorkspaceHeader({ w, onSelect, onReload, onClearCache, onRemove }: { w: Workspace; onSelect: () => void; onReload: () => void; onClearCache: () => void; onRemove: () => void }) {
   const Icon = sourceIcon(w);
   const { name, branch } = splitLabel(w.store.label);
   const v6 = w.tree?.layout === 'v6';
@@ -55,6 +55,7 @@ function WorkspaceHeader({ w, onSelect, onReload, onRemove }: { w: Workspace; on
         <MenuTrigger render={<button type="button" aria-label={`${w.store.label} options`} className="shrink-0 rounded px-1 text-[11px] opacity-0 hover:bg-sidebar-accent group-hover:opacity-100 focus-visible:opacity-100">···</button>} />
         <MenuPopup align="end">
           <MenuItem onClick={onReload}><RefreshCw />Reload</MenuItem>
+          <MenuItem onClick={onClearCache}><DatabaseZap />Clear cache and reload</MenuItem>
           <MenuSeparator />
           <MenuItem onClick={onRemove}><LogOut />Disconnect</MenuItem>
         </MenuPopup>
@@ -108,7 +109,7 @@ export function AppSidebar() {
         {board.workspaces.map((w) => {
           return (
             <div key={w.store.id} className="mt-4">
-              <WorkspaceHeader w={w} onSelect={() => setScope({ workspaceId: w.store.id })} onReload={() => void board.reload(w.store)} onRemove={() => { board.remove(w.store.id); setScope({}); }} />
+              <WorkspaceHeader w={w} onSelect={() => setScope({ workspaceId: w.store.id })} onReload={() => void board.reload(w.store)} onClearCache={() => void board.clearCacheAndReload().then(() => toast.success('Cache cleared; projects read again'))} onRemove={() => { board.remove(w.store.id); setScope({}); }} />
               {w.loading && !w.tree && <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Loading…</div>}
               {w.error && <div className="px-3 py-1 text-xs text-destructive">{w.error}</div>}
               {w.tree?.initiatives.map((i) => (

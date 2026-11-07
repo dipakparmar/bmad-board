@@ -25,7 +25,9 @@ export function whatsNext(leaves: Leaf[], doneContainers: Iterable<string> = [])
   const view: NextView = { readyToRefine: [], readyToStart: [], inProgress: [], blocked: [] };
   for (const leaf of leaves) {
     if (leaf.state === 'done' || leaf.state === 'dropped') continue;
-    const waitingOn = [...leaf.after.filter((k) => !met.has(k)), ...leaf.gatedBy.filter((k) => !done.has(k))];
+    // v6 builds stories one after another, so there the story before counts as a prerequisite.
+    const sequence = leaf.links?.sequential && leaf.links.previous ? [leaf.links.previous] : [];
+    const waitingOn = [...new Set([...leaf.after, ...sequence])].filter((k) => !met.has(k)).concat(leaf.gatedBy.filter((k) => !done.has(k)));
     if (leaf.status === 'blocked' || leaf.plan?.blockedAt) {
       view.blocked.push({ leaf, waitingOn, reason: leaf.plan?.blockedReason });
     } else if (leaf.state === 'in-progress' || leaf.state === 'review') {

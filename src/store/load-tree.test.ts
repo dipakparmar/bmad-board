@@ -36,6 +36,16 @@ describe('loadTicketTree on the ticket-tree layout', () => {
     expect(tree.initiatives[0]?.epics[1]?.refined).toBe(false);
   });
 
+  test('finds prerequisites written in words and the build order', async () => {
+    const tree = await loadTicketTree(fixture('shop'));
+    const byKey = new Map(allLeaves(tree).map((l) => [l.key, l]));
+    // "## Dependencies — Story 1.3" in the story file; shown, not enforced.
+    expect(byKey.get('epic-pricing-rules/2')?.links).toEqual({ noted: ['epic-pricing-rules/3'], previous: 'epic-pricing-rules/1' });
+    expect(byKey.get('epic-pricing-rules/1')?.links).toBeUndefined();
+    expect(byKey.get('epic-cart-rules/1')?.links).toEqual({ previousEpic: 'epic-pricing-rules' });
+    expect(tree.problems).toEqual([]);
+  });
+
   test('what is next matches the agents\' view', async () => {
     const tree = await loadTicketTree(fixture('shop'));
     const next = whatsNext(allLeaves(tree), doneContainers(tree));
@@ -60,13 +70,17 @@ describe('loadTicketTree on the v6 layout', () => {
       ['Accounts', 'in-progress', 'optional', 'People can sign up, sign in and recover their account.'],
       ['Orders', undefined, 'optional', 'People can see what they ordered.'],
     ]);
-    expect(sprint?.epics[0]?.leaves.map((l) => [l.key, l.title, l.status, l.state, l.after])).toEqual([
-      ['epic-1/1', 'User signup', 'done', 'done', []],
-      ['epic-1/2', 'Password reset by email', 'in-review', 'review', ['epic-1/1']],
-      ['epic-1/3', 'Profile page', 'ready-for-dev', 'backlog', ['epic-1/2']],
+    // Story order is build order, not a declared prerequisite; v6 still builds one after another.
+    expect(sprint?.epics[0]?.leaves.map((l) => [l.key, l.title, l.status, l.state, l.after, l.links?.previous ?? null])).toEqual([
+      ['epic-1/1', 'User signup', 'done', 'done', [], null],
+      ['epic-1/2', 'Password reset by email', 'in-review', 'review', [], 'epic-1/1'],
+      ['epic-1/3', 'Profile page', 'ready-for-dev', 'backlog', [], 'epic-1/2'],
       // Planned in epics.md, not yet in sprint planning.
-      ['epic-1/4', 'Delete account', '', 'backlog', ['epic-1/3']],
+      ['epic-1/4', 'Delete account', '', 'backlog', [], 'epic-1/3'],
     ]);
+    // "**Prerequisites:** Story 1.1" under Story 1.4 in epics.md.
+    expect(sprint?.epics[0]?.leaves[3]?.links?.noted).toEqual(['epic-1/1']);
+    expect(sprint?.epics[1]?.leaves[0]?.links?.previousEpic).toBe('epic-1');
     const reset = sprint?.epics[0]?.leaves[1];
     expect(reset?.entry?.description).toContain('reset my password by email');
     expect(reset?.entry?.verify).toContain('expires after an hour');

@@ -7,8 +7,9 @@
 import { parse } from 'yaml';
 import {
   boardState, docKind, docLinks, laterStatus, leafStatusFromV6, parseEpicsDoc, parseSprintStatus, parseStoryFile,
-  type DocLink, type Epic, type Leaf, type TicketTree, type V6EpicsDoc,
+  type DocLink, type Epic, type Leaf, type LeafLinks, type TicketKey, type TicketTree, type V6EpicsDoc,
 } from '../domain';
+import { proseDependencies, type ProseRef } from '../domain/prose-deps';
 import { parseFrontmatter } from './frontmatter';
 import { joinPath, type FileSource } from './file-source';
 
@@ -164,8 +165,31 @@ export async function loadV6Tree(src: FileSource, outputFolder: string): Promise
     }
     epic.leaves.sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
   }
-  // v6 builds an epic's stories in order: each waits on the one before it.
-  for (const epic of epics.values()) epic.leaves.forEach((l, i) => { const prev = epic.leaves[i - 1]; if (prev) l.after = [prev.key]; });
+  // v6 builds an epic's stories in order, so each waits on the one before it; that is order, not a
+  // declared prerequisite. What a story or epic says it needs in words is drawn as well.
+  const all = [...epics.values()].sort((a, b) => Number(a.id) - Number(b.id));
+  const keys = new Set(all.flatMap((e) => [e.slug, ...e.leaves.map((l) => l.key)]));
+  const toKey = (r: ProseRef, epicNum: number): TicketKey | null => {
+    const k = r.kind === 'story' ? `epic-${r.epic}/${r.story}` : r.kind === 'sibling' ? `epic-${epicNum}/${r.id}` : r.kind === 'epic' ? `epic-${r.id}` : /^epic-\d+$/.test(r.name) ? r.name : null;
+    return k && keys.has(k) ? k : null;
+  };
+  all.forEach((epic, ei) => {
+    const num = Number(epic.id);
+    const planned = epicsFile.doc.epics.find((e) => e.num === num);
+    const epicNoted = [...new Set(proseDependencies(planned?.goal ?? '').map((r) => toKey(r, num)).filter((k): k is TicketKey => !!k && k !== epic.slug && !k.startsWith(`${epic.slug}/`)))];
+    epic.leaves.forEach((l, i) => {
+      const prev = epic.leaves[i - 1];
+      const text = [l.file?.body ?? '', planned?.stories.find((s) => s.story === String(l.id))?.body ?? ''].join('\n\n');
+      const noted = [...new Set(proseDependencies(text).map((r) => toKey(r, num)).filter((k): k is TicketKey => !!k && k !== l.key))];
+      const links: LeafLinks = {};
+      if (prev) Object.assign(links, { previous: prev.key, sequential: true });
+      if (noted.length) links.noted = noted;
+      if (epicNoted.length) links.epicNoted = epicNoted;
+      const before = all[ei - 1];
+      if (before) links.previousEpic = before.slug;
+      if (Object.keys(links).length) l.links = links;
+    });
+  });
 
   return {
     projectRoot: '', outputFolder: paths.output, tracker: 'repo', layout: 'v6', backlog: [], problems,

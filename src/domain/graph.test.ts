@@ -22,6 +22,22 @@ describe('dependency graph', () => {
     expect(g.nodes.find((n) => n.key === 'b/2')?.layer).toBe(3);
   });
 
+  test('adds named and inferred links, with inferred order never overriding the text', () => {
+    const withLinks = (l: { leaf: Leaf }, links: Leaf['links']) => ({ leaf: { ...l.leaf, links } });
+    const items = [
+      leaf('a/1'),
+      withLinks(leaf('a/2'), { previous: 'a/1' }),
+      // Its text says it needs a/2… but build order puts it first: the text wins, no loop.
+      withLinks(leaf('a/3'), { noted: ['a/4'] }),
+      withLinks(leaf('a/4'), { previous: 'a/3' }),
+      withLinks(leaf('b/1'), { previousEpic: 'a', epicNoted: [] }),
+    ];
+    const g = dependencyGraph(items);
+    expect(g.edges.map((e) => `${e.from}>${e.to}:${e.kind}`).sort()).toEqual(['a/1>a/2:order', 'a/4>a/3:noted'].sort());
+    expect(g.cyclic).toEqual([]);
+    expect(dependencyGraph(items, { order: false }).edges.map((e) => e.kind)).toEqual(['noted']);
+  });
+
   test('survives cycles and can drop unconnected tickets', () => {
     const g = dependencyGraph([leaf('a/1', ['a/2']), leaf('a/2', ['a/1']), leaf('a/3')], { connectedOnly: true });
     expect(g.nodes.map((n) => n.key).sort()).toEqual(['a/1', 'a/2']);
