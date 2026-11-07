@@ -51,15 +51,30 @@ describe('loadTicketTree on the ticket-tree layout', () => {
 });
 
 describe('loadTicketTree on the v6 layout', () => {
-  test('reads sprint-status.yaml read-only', async () => {
+  test('reads sprint-status.yaml, the epics file and story files, read-only', async () => {
     const tree = await loadTicketTree(fixture('legacy-v6'));
     expect(tree.layout).toBe('v6');
     const [sprint] = tree.initiatives;
-    expect(sprint?.epics.map((e) => [e.title, e.status])).toEqual([['Accounts', 'in-progress'], ['Orders', undefined]]);
-    expect(sprint?.epics[0]?.leaves.map((l) => [l.key, l.title, l.state])).toEqual([
-      ['epic-1/1', 'User Signup', 'done'],
-      ['epic-1/2', 'Password reset by email', 'review'],
-      ['epic-1/3', 'Profile Page', 'backlog'],
+    expect(sprint?.title).toBe('Legacy shop');
+    expect(sprint?.epics.map((e) => [e.title, e.status, e.retrospective?.status, e.description])).toEqual([
+      ['Accounts', 'in-progress', 'optional', 'People can sign up, sign in and recover their account.'],
+      ['Orders', undefined, 'optional', 'People can see what they ordered.'],
     ]);
+    expect(sprint?.epics[0]?.leaves.map((l) => [l.key, l.title, l.status, l.state, l.after])).toEqual([
+      ['epic-1/1', 'User signup', 'done', 'done', []],
+      ['epic-1/2', 'Password reset by email', 'in-review', 'review', ['epic-1/1']],
+      ['epic-1/3', 'Profile page', 'ready-for-dev', 'backlog', ['epic-1/2']],
+      // Planned in epics.md, not yet in sprint planning.
+      ['epic-1/4', 'Delete account', '', 'backlog', ['epic-1/3']],
+    ]);
+    const reset = sprint?.epics[0]?.leaves[1];
+    expect(reset?.entry?.description).toContain('reset my password by email');
+    expect(reset?.entry?.verify).toContain('expires after an hour');
+    expect(reset?.plan?.body).toContain('[AI-Review]');
+    expect(reset?.docs?.map((d) => [d.candidates[0], d.anchor])).toContainEqual(['_bmad-output/planning-artifacts/architecture.md', 'Auth']);
+    expect(sprint?.epics[0]?.docs?.map((d) => d.kind)).toEqual(['epics', 'retro']);
+    expect(sprint?.docs?.map((d) => d.kind)).toEqual(['sprint', 'epics', 'architecture', 'prd']);
+    expect(tree.sprint).toMatchObject({ projectKey: 'SHOP', lastUpdated: '11-05-2026 17:20', trackingSystem: 'file-system', actionItems: [{ epic: 1, action: 'Add an expiry test to every token flow', owner: 'Priya', status: 'open' }] });
+    expect(tree.problems).toEqual([]);
   });
 });

@@ -32,7 +32,7 @@ function Notices() {
         hidden.includes(w.store.id) ? null : (
           <div key={w.store.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-1.5 text-xs" title={`${w.store.label} uses the BMAD v6 layout`}>
             <AlertTriangle className="size-3.5 shrink-0 text-warning" />
-            <span className="min-w-0 truncate"><strong className="font-medium">v6 layout, read-only.</strong> Run <code>bmad migrate method</code> in <span className="font-mono">{w.store.label}</span> to edit tickets here.</span>
+            <span className="min-w-0 truncate"><strong className="font-medium">v6 sprint{w.tree?.sprint?.project ? ` · ${w.tree.sprint.project}` : ''}, read-only.</strong>{w.tree?.sprint?.lastUpdated || w.tree?.sprint?.generated ? ` Updated ${w.tree.sprint.lastUpdated ?? w.tree.sprint.generated}.` : ''} Run <code>bmad migrate method</code> in <span className="font-mono">{w.store.label}</span> to edit tickets here.</span>
             <button type="button" aria-label="Dismiss" className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground hover:bg-warning/15" onClick={() => setHidden((h) => [...h, w.store.id])}><X className="size-3.5" /></button>
           </div>
         )

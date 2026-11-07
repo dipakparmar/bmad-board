@@ -17,6 +17,8 @@ export interface DocLink {
   label: string;
   /** What kind of doc it looks like, from its path. */
   kind: DocKind;
+  /** A name to show instead of the file name and anchor ("Story 1.2" for a section of epics.md). */
+  title?: string;
 }
 
 export type DocKind = 'prd' | 'architecture' | 'ux' | 'brief' | 'research' | 'epics' | 'sprint' | 'retro' | 'plan' | 'story' | 'context' | 'spec' | 'doc';
@@ -50,7 +52,8 @@ export function docTitleFromPath(path: string): string {
   const parts = path.split('/').filter(Boolean);
   let name = parts.at(-1) ?? path;
   // `prd-x/prd-x.md`, `ux-x/DESIGN.md`: the folder says more than the file.
-  if (/^(DESIGN|EXPERIENCE|ARCHITECTURE-SPINE|index|prd|brief)\.md$/i.test(name) && parts.length > 1) name = `${parts.at(-2)} · ${name}`;
+  const folder = parts.at(-2) ?? '';
+  if (/^(DESIGN|EXPERIENCE|ARCHITECTURE-SPINE|index|prd|brief)\.md$/i.test(name) && folder && !/^(planning|implementation)-artifacts$|^docs$/.test(folder)) name = `${parts.at(-2)} · ${name}`;
   return name.replace(/\.md$/i, '');
 }
 

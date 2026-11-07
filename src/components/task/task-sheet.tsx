@@ -100,8 +100,8 @@ function LinkedDocs({ ticket: t }: { ticket: Ticket }) {
                 return (
                   <button key={`${path}#${d.anchor ?? ''}`} type="button" title={`${path}${d.anchor ? `#${d.anchor}` : ''}`} onClick={() => openDoc(t.workspaceId, d)} className="flex max-w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent">
                     <KindBadge kind={d.kind} />
-                    <span className="truncate">{docTitleFromPath(path)}{d.anchor ? ` § ${d.anchor}` : ''}</span>
-                    {d.label && !['source', 'companion', 'reference', 'file', 'document', DOC_KIND_LABELS[d.kind].toLowerCase()].includes(d.label) && <span className="text-muted-foreground">· {d.label}</span>}
+                    <span className="truncate">{d.title ?? `${docTitleFromPath(path)}${d.anchor ? ` § ${d.anchor}` : ''}`}</span>
+                    {d.label && !d.title && !['source', 'companion', 'reference', 'file', 'document', DOC_KIND_LABELS[d.kind].toLowerCase()].includes(d.label) && <span className="text-muted-foreground">· {d.label}</span>}
                   </button>
                 );
               })}

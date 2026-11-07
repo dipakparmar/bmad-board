@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { applyWithToast, setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import type { Ticket } from '@/app/view-model';
-import { LEAF_STATUSES, lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesPath, statusLabel, STATUS_LABELS, type LeafStatus, type StandupCommit, type StandupMember, type StandupNotes } from '@/domain';
+import { LEAF_STATUSES, lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesPath, statusLabel, STATUS_LABELS, type LeafStatus, type SprintInfo, type StandupCommit, type StandupMember, type StandupNotes } from '@/domain';
 import { Button } from '@/components/ui/button';
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -281,7 +281,7 @@ export function StandupView() {
             <Button size="icon-sm" variant="ghost" aria-label="Next" disabled={wrapUp} onClick={() => setTurn((t) => Math.min((t ?? 0) + 1, members.length))}><ChevronRight /></Button>
           </div>
           {current && <MemberCard m={current} focused big className="flex-1" note={noteFor(current.id)} onNote={setNoteFor(current.id)} />}
-          {wrapUp && <WrapUp unowned={report.unowned} upForGrabs={report.upForGrabs} big team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />}
+          {wrapUp && <WrapUp unowned={report.unowned} upForGrabs={report.upForGrabs} actions={ws?.tree?.sprint?.actionItems} big team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />}
           <p className="shrink-0 text-center text-xs text-muted-foreground">← → to move between people · Esc to end</p>
         </div>
       ) : (
@@ -290,14 +290,15 @@ export function StandupView() {
             {members.length === 0 && <p className="text-sm text-muted-foreground">No one holds a ticket or committed since then. Assign tickets in the ticket sheet to see people here.</p>}
             {members.map((m) => <MemberCard key={m.id} m={m} className="max-h-[70vh] shrink-0 md:max-h-none md:w-80" note={noteFor(m.id)} onNote={setNoteFor(m.id)} />)}
           </div>
-          <WrapUp side unowned={report.unowned} upForGrabs={report.upForGrabs} team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />
+          <WrapUp side unowned={report.unowned} upForGrabs={report.upForGrabs} actions={ws?.tree?.sprint?.actionItems} team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />
         </div>
       )}
     </div>
   );
 }
 
-function WrapUp({ unowned, upForGrabs, big, side, team, onTeam }: { unowned: Ticket[]; upForGrabs: Ticket[]; big?: boolean; side?: boolean; team: string; onTeam: (v: string) => void }) {
+function WrapUp({ unowned, upForGrabs, big, side, team, onTeam, actions = [] }: { unowned: Ticket[]; upForGrabs: Ticket[]; big?: boolean; side?: boolean; team: string; onTeam: (v: string) => void; actions?: SprintInfo['actionItems'] }) {
+  const open = actions.filter((a) => a.status !== 'done');
   return (
     <section className={cn('flex min-h-0 flex-col rounded-xl border border-dashed border-border', side && 'shrink-0 md:w-80', big && 'flex-1')}>
       <div className={cn('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4', big && 'p-6')}>
@@ -307,6 +308,16 @@ function WrapUp({ unowned, upForGrabs, big, side, team, onTeam }: { unowned: Tic
         <Section title="Up for grabs" tone="text-success" empty="No unassigned ready tickets.">
           {upForGrabs.map((t) => <TicketLine key={t.uid} ticket={t} />)}
         </Section>
+        {open.length > 0 && (
+          <Section title="Retro action items" tone="text-info">
+            {open.map((a) => (
+              <div key={`${a.epic}-${a.action}`} className="px-1.5 py-1 text-[13px]">
+                {a.action}
+                <span className="block text-xs text-muted-foreground">{[a.epic !== undefined ? `Epic ${a.epic}` : '', a.owner, a.status === 'in-progress' ? 'in progress' : 'open'].filter(Boolean).join(' · ')}</span>
+              </div>
+            ))}
+          </Section>
+        )}
         {big && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Hand className="size-3.5" />Pick owners, then end the stand-up. <CheckCheck className="size-3.5" /></p>}
       </div>
       <div className={cn('flex shrink-0 flex-col gap-1 border-border border-t border-dashed p-3', big && 'px-6 py-4')}>

@@ -12,7 +12,13 @@ New here? Start with [docs/getting-started.md](docs/getting-started.md). See [do
 | **GitHub repo** | "GitHub" in the sidebar, `owner/name`, then sign in with your local `gh` login (needs the local server; the token never reaches the browser) or a fine-grained token (Contents + Pull requests: write) | commits on a `bmad-board/…` branch, one pull request per session |
 | **Open folder** | "Open folder" in Chrome or Edge | read-only |
 
-Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-status.yaml`) open read-only. Run `bmad migrate method` to move them to the ticket tree.
+Projects on the older v6 layout open read-only, parsed the way v6's workflows write them:
+- `sprint-status.yaml` (paths from `_bmad/bmm/config.yaml`): project metadata, epic statuses, stories including split ones (`2-6a-…`), retrospectives and their action items. Legacy statuses (`drafted`, `contexted`) are mapped.
+- `epics.md` or sharded `epics/epic-N.md`: epic titles and goals, plus stories that sprint planning hasn't picked up yet, which show as backlog.
+- Story files (`N-M-slug.md` in `story_location`): title, `Status:`, the user story, acceptance criteria, and the Tasks / Subtasks checklist, which shows as progress on the card. When a story file and sprint-status.yaml disagree, the later status wins, as in v6.
+- Retro action items show in the stand-up wrap-up. Each story links to its section of the epics file, its `[Source: …]` citations, and the planning docs.
+
+Run `bmad migrate method` to move a v6 project to the ticket tree and edit it here.
 
 ## What you can do on the board
 

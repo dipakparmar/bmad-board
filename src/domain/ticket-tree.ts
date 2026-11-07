@@ -158,6 +158,21 @@ export interface Initiative extends Container {
 export interface Epic extends Container {
   type: 'epic';
   leaves: Leaf[];
+  /** v6: the epic's retrospective, from `epic-N-retrospective` in sprint-status.yaml. */
+  retrospective?: { status: 'optional' | 'done'; path?: string };
+}
+
+/** v6 sprint metadata from sprint-status.yaml, kept for display (the v6 tree is read-only). */
+export interface SprintInfo {
+  statusPath: string;
+  project?: string;
+  projectKey?: string;
+  generated?: string;
+  lastUpdated?: string;
+  trackingSystem?: string;
+  storyLocation?: string;
+  epicsPath?: string;
+  actionItems: { epic?: number; action: string; owner?: string; status: 'open' | 'in-progress' | 'done' }[];
 }
 
 /** Which tracker the BMAD config names (`_bmad/custom/ticketing-store-config.toml`). */
@@ -177,4 +192,6 @@ export interface TicketTree {
   problems: string[];
   /** Team-wide board settings from `_bmad/custom/bmad-board.toml`; defaults when the file is absent. */
   board?: BoardConfig;
+  /** v6 only: the sprint file's metadata and retrospective action items. */
+  sprint?: SprintInfo;
 }
