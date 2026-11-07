@@ -15,3 +15,13 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run build
+      - name: Build and smoke-test the executable
+        run: |
+          bun scripts/build-cli.ts --skip-app
+          bin=release/bmad-board-linux-x64
+          $bin --version
+          mkdir -p /tmp/proj/_bmad && cd /tmp/proj
+          "$GITHUB_WORKSPACE/$bin" --no-open --port 34999 & pid=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:34999/api/info && break; sleep 0.5; done
+          curl -sf http://127.0.0.1:34999/ | grep -q '<div id="root">'
+          kill $pid

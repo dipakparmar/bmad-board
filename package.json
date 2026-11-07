@@ -10,7 +10,9 @@
     "server": "bun server/index.ts",
     "start": "vite build && bun server/index.ts",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cli": "bun server/cli.ts",
+    "build:cli": "bun scripts/build-cli.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",

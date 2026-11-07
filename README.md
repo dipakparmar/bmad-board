@@ -4,11 +4,24 @@ A board, list and ticket view for [BMAD-METHOD](https://github.com/bmad-code-org
 
 New here? Start with [docs/getting-started.md](docs/getting-started.md). See [docs/domain-model.md](docs/domain-model.md) for the model and how it maps to Kaneo.
 
+## Install
+
+`bmad-board` is one executable with the app inside. Install it once, then run it in any BMAD project:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dipakparmar/bmad-board/main/install.sh | sh
+cd ~/code/my-project && bmad-board
+```
+
+It serves the current folder on <http://127.0.0.1:33714> (or the next free port) and opens your browser. `bmad-board ~/code/other`, `--port 4000` and `--no-open` do what they say; `bmad-board --help` lists the rest. Builds exist for macOS and Linux on arm64 and x64; the script picks yours, checks its checksum, and installs to `/usr/local/bin` when writable, else `~/.local/bin` (`BMAD_BOARD_INSTALL_DIR` and `BMAD_BOARD_VERSION=v0.2.0` change that). You can also download a `.tar.gz` from [Releases](https://github.com/dipakparmar/bmad-board/releases) yourself. It needs `git` on the machine for history and commits, and `gh` only for the GitHub sign-in.
+
+To build it yourself: `bun run build:cli` (this machine) or `bun scripts/build-cli.ts --all`, which writes `release/bmad-board-<os>-<arch>`. Pushing a `v*` tag builds all four, signs the macOS ones, smoke-tests them, and attaches them to a GitHub release.
+
 ## Three ways to connect a project
 
 | | How | Writes |
 |---|---|---|
-| **Local checkout** | `bun run start -- --root ~/code/my-project` and open <http://127.0.0.1:33714> | each change is one commit on your current branch (never pushed) |
+| **Local checkout** | `bmad-board` inside the project (from source: `bun run start -- --root ~/code/my-project`) | each change is one commit on your current branch (never pushed) |
 | **GitHub repo** | "GitHub" in the sidebar, `owner/name`, then sign in with your local `gh` login (needs the local server; the token never reaches the browser) or a fine-grained token (Contents + Pull requests: write) | commits on a `bmad-board/…` branch, one pull request per session |
 | **Open folder** | "Open folder" in Chrome or Edge | read-only |
 

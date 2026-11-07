@@ -19,9 +19,12 @@ function arg(name: string): string | undefined {
 }
 
 const root = resolve((arg('root') ?? process.env.BMAD_BOARD_ROOT ?? process.cwd()).replace(/^~(?=$|\/)/, process.env.HOME ?? '~'));
-const port = Number(arg('port') ?? process.env.BMAD_BOARD_PORT ?? 33714);
+const askedPort = arg('port') ?? process.env.BMAD_BOARD_PORT;
+const port = Number(askedPort ?? 33714);
 const dist = resolve(import.meta.dir, '..', 'dist');
-const ALLOWED_HOSTS = new Set([`127.0.0.1:${port}`, `localhost:${port}`, '127.0.0.1:33713', 'localhost:33713']);
+/** The built app inside a compiled `bmad-board` binary: URL path → embedded file. Absent when run from source. */
+const embedded = (globalThis as { __BMAD_BOARD_ASSETS__?: Record<string, string> }).__BMAD_BOARD_ASSETS__;
+let ALLOWED_HOSTS = new Set<string>();
 
 /** Resolves a project-relative path, refusing anything outside the root or inside .git. */
 function inside(base: string, path: string): string {
@@ -323,7 +326,17 @@ function events(): Response {
   return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' } });
 }
 
+const TYPES: Record<string, string> = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml', png: 'image/png', ico: 'image/x-icon', json: 'application/json', woff2: 'font/woff2', woff: 'font/woff', txt: 'text/plain' };
+
 async function serveStatic(pathname: string): Promise<Response> {
+  if (embedded) {
+    const key = embedded[pathname] ? pathname : '/index.html';
+    const file = embedded[key];
+    if (!file) return new Response('This build has no app inside.', { status: 500 });
+    const type = TYPES[key.split('.').pop() ?? ''] ?? 'application/octet-stream';
+    const immutable = key.startsWith('/assets/');
+    return new Response(Bun.file(file), { headers: { 'content-type': type, 'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' } });
+  }
   const file = pathname === '/' ? join(dist, 'index.html') : inside(dist, pathname);
   try {
     if ((await stat(file)).isFile()) return new Response(Bun.file(file));
@@ -339,9 +352,9 @@ async function serveStatic(pathname: string): Promise<Response> {
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
-const server = Bun.serve({
+const serve = (p: number) => Bun.serve({
   hostname: '127.0.0.1',
-  port,
+  port: p,
   idleTimeout: 0,
   async fetch(req) {
     const url = new URL(req.url);
@@ -408,4 +421,19 @@ const server = Bun.serve({
   },
 });
 
-console.log(`bmad-board serving ${root}\n  → http://${server.hostname}:${server.port}`);
+/** Binds the asked port; without an explicit --port, the next free one when the default is taken. */
+function start(): ReturnType<typeof serve> {
+  for (let p = port; ; p++) {
+    try {
+      return serve(p);
+    } catch (e) {
+      if (askedPort || p >= port + 20 || !/in use|EADDRINUSE/i.test(String((e as Error).message ?? e))) throw e;
+    }
+  }
+}
+
+export const server = start();
+ALLOWED_HOSTS = new Set([`127.0.0.1:${server.port}`, `localhost:${server.port}`, '127.0.0.1:33713', 'localhost:33713']);
+export const url = `http://${server.hostname}:${server.port}`;
+export { root };
+console.log(`bmad-board serving ${root}\n  → ${url}`);

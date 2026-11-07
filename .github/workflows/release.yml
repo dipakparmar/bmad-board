@@ -1,0 +1,76 @@
+name: Release
+
+# Push a tag like v0.2.0 to build the bmad-board executables and attach them to a GitHub release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release (must exist), e.g. v0.2.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: macos-latest, target: darwin-arm64, native: true }
+          - { os: macos-latest, target: darwin-x64, native: false }
+          - { os: ubuntu-latest, target: linux-x64, native: true }
+          - { os: ubuntu-latest, target: linux-arm64, native: false }
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Stamp the version from the tag
+        run: bun -e 'const p=await Bun.file("package.json").json(); p.version=process.env.TAG.replace(/^v/,""); await Bun.write("package.json", JSON.stringify(p,null,2)+"\n")'
+      - run: bun scripts/build-cli.ts --target bun-${{ matrix.target }}
+      - name: Sign (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --sign - release/bmad-board-${{ matrix.target }}
+      - name: Smoke test
+        if: matrix.native
+        run: |
+          bin=release/bmad-board-${{ matrix.target }}
+          test "$($bin --version)" = "${TAG#v}"
+          mkdir -p /tmp/proj/_bmad && cd /tmp/proj
+          "$GITHUB_WORKSPACE/$bin" --no-open --port 34999 & pid=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:34999/api/info && break; sleep 0.5; done
+          curl -sf http://127.0.0.1:34999/ | grep -q '<div id="root">'
+          kill $pid
+      - name: Package
+        run: |
+          cd release
+          cp bmad-board-${{ matrix.target }} bmad-board
+          tar -czf bmad-board-${{ matrix.target }}.tar.gz bmad-board
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bmad-board-${{ matrix.target }}
+          path: release/bmad-board-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum *.tar.gz > checksums.txt && cat checksums.txt
+      - name: Publish
+        run: |
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber dist/*.tar.gz dist/checksums.txt
