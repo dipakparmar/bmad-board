@@ -3,7 +3,7 @@
  * epic gates (an epic's `after`: every ticket in it waits for the other epic to be done). Nodes are laid
  * out in layers, so everything a ticket waits on sits to its left.
  */
-import type { Leaf, TicketKey } from './ticket-tree';
+import type { AfterRef, Leaf, TicketKey } from './ticket-tree';
 
 export interface GraphEdge {
   from: TicketKey;
@@ -137,4 +137,45 @@ function walk(start: TicketKey, edges: GraphEdge[], dir: (e: GraphEdge) => [Tick
     }
   }
   return out;
+}
+
+/** A ticket as the graph edits it: its leaf, and the ref people call it by (`1.2`). */
+export interface Linkable {
+  leaf: Leaf;
+  ref: string;
+}
+
+/**
+ * Why `target` cannot be made to wait on `prereq`, or null when it can. `after` lives in tickets.toml,
+ * so both need an entry, and refs only resolve inside one initiative.
+ */
+export function cannotLink(target: Linkable, prereq: Linkable, edges: GraphEdge[]): string | null {
+  if (target.leaf.key === prereq.leaf.key) return 'A ticket cannot wait on itself.';
+  if (!target.leaf.entry || target.leaf.folder === 'backlog') return `${target.ref} is a backlog ticket, which has no tickets.toml entry to hold dependencies.`;
+  if (!prereq.leaf.entry || prereq.leaf.folder === 'backlog') return `${prereq.ref} is a backlog ticket; only tickets in an epic can be waited on.`;
+  if (target.leaf.initiative !== prereq.leaf.initiative) return 'Dependencies only reach tickets in the same initiative.';
+  if (target.leaf.after.includes(prereq.leaf.key)) return `${target.ref} already waits on ${prereq.ref}.`;
+  if (prereq.leaf.key === target.leaf.key || upstreamOf(prereq.leaf.key, edges).has(target.leaf.key)) return `${prereq.ref} already waits on ${target.ref}, so this would make a loop.`;
+  return null;
+}
+
+/** How `target`'s tickets.toml writes a wait on `prereq`: a sibling id, or `"<epic>.<id>"` across epics. */
+export function afterRefFor(target: Linkable, prereq: Linkable): AfterRef {
+  return target.leaf.folder === prereq.leaf.folder && prereq.leaf.id !== null ? prereq.leaf.id : prereq.ref;
+}
+
+/** `target`'s entry `after`, plus `prereq`. */
+export function afterWith(target: Linkable, prereq: Linkable): AfterRef[] {
+  return [...(target.leaf.entry?.after ?? []), afterRefFor(target, prereq)];
+}
+
+/** `target`'s entry `after`, minus whichever ref resolves to `prereq`. Whole-epic refs are kept. */
+export function afterWithout(target: Linkable, prereq: Linkable): AfterRef[] {
+  const raw = target.leaf.entry?.after ?? [];
+  return raw.filter((r) => {
+    const s = String(r);
+    if (s === prereq.ref) return false;
+    if (target.leaf.folder === prereq.leaf.folder && s === String(prereq.leaf.id)) return false;
+    return true;
+  });
 }
