@@ -27,6 +27,8 @@ Projects on the older v6 layout (`_bmad-output/implementation-artifacts/sprint-s
 
 - **Dependencies** draws what waits on what with React Flow, laid out left to right in build order by dagre: `after` links as solid arrows and epic gates as dashed ones. Pan, zoom and the minimap get around a big project; hover a ticket to light up its whole chain, and loops are flagged. Where the project is writable, drag from a ticket's right dot to another ticket to make that one wait on it, or select an arrow and press Delete (or its ×) to remove it. Each is a commit to `tickets.toml`, and loops are refused.
 
+- **Docs** reads the project's planning and implementation documents in the board: PRDs, architecture, UX, epics, sprint status, retrospectives, stand-up notes and the project's `docs/` folder, with an outline, front matter details, and links between docs that open in place. Every ticket lists its **Linked docs**, gathered from what BMAD records: `sources`, `companions` and plan `context` front matter, tickets.toml `references` (with `#anchor`s that jump to the section), a `## References` section, `[Source: …]` citations and markdown links, plus the PRD, UX and architecture folders beside its epic and initiative. **Back to 1.2** returns to the ticket.
+
 - **Board and list views** of every initiative, epic and backlog ticket, in the Kaneo layout. Each card shows readiness the way BMAD's own `tickets.py next` reports it: ready, blocked (and on what), or needs refining.
 - **Drag a card between lanes** to set its status, or pick one in the ticket sheet. **Drag rows in the list** to change an epic's build order.
 - **Edit tickets.** You can change the description, risk, needs-a-person and assignee, and block or unblock a ticket with a reason.

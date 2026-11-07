@@ -1,4 +1,4 @@
-import { KanbanSquare, Keyboard, List, Moon, Network, Plus, Search, Sun, UserRound, Users, Workflow } from 'lucide-react';
+import { BookOpen, KanbanSquare, Keyboard, List, Moon, Network, Plus, Search, Sun, UserRound, Users, Workflow } from 'lucide-react';
 import { useBoardContext, type View } from '@/app/board-context';
 import { useTheme } from '@/app/use-theme';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ const VIEWS: { id: View; label: string; icon: typeof List }[] = [
   { id: 'list', label: 'List', icon: List },
   { id: 'graph', label: 'Dependencies', icon: Network },
   { id: 'standup', label: 'Stand-up', icon: Users },
+  { id: 'docs', label: 'Docs', icon: BookOpen },
 ];
 
 export function Header() {

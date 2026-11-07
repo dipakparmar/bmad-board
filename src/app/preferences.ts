@@ -18,7 +18,7 @@ export const CARD_FIELDS: { id: CardField; label: string; help: string }[] = [
   { id: 'epic', label: 'Epic', help: 'Which epic it belongs to' },
 ];
 
-export type ViewId = 'next' | 'board' | 'list' | 'graph' | 'standup';
+export type ViewId = 'next' | 'board' | 'list' | 'graph' | 'standup' | 'docs';
 
 export interface Preferences {
   defaultView: ViewId;

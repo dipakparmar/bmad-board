@@ -65,6 +65,7 @@ const VIEW_OPTIONS: { id: ViewId; label: string }[] = [
   { id: 'list', label: 'List' },
   { id: 'graph', label: 'Dependencies' },
   { id: 'standup', label: 'Stand-up' },
+  { id: 'docs', label: 'Docs' },
 ];
 
 function YouSettings() {

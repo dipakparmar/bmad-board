@@ -11,6 +11,7 @@ export const SHORTCUTS: { keys: string[]; label: string; group: 'Go to' | 'Actio
   { keys: ['g', 'l'], label: 'List', group: 'Go to' },
   { keys: ['g', 'd'], label: 'Dependencies', group: 'Go to' },
   { keys: ['g', 'u'], label: 'Stand-up', group: 'Go to' },
+  { keys: ['g', 'o'], label: 'Docs', group: 'Go to' },
   { keys: ['g', 's'], label: 'Settings', group: 'Go to' },
   { keys: ['c'], label: 'New ticket', group: 'Actions' },
   { keys: ['m'], label: 'Only my tickets, on or off', group: 'Actions' },
@@ -22,7 +23,7 @@ export const SHORTCUTS: { keys: string[]; label: string; group: 'Go to' | 'Actio
   { keys: ['Esc'], label: 'Close a panel or dialog', group: 'General' },
 ];
 
-const GO: Record<string, View> = { n: 'next', b: 'board', l: 'list', d: 'graph', u: 'standup', s: 'settings' };
+const GO: Record<string, View> = { n: 'next', b: 'board', l: 'list', d: 'graph', u: 'standup', o: 'docs', s: 'settings' };
 
 function typing(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

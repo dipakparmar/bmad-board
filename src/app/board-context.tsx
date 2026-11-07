@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { DocLink } from '@/domain';
 import { loadPreferences, usePreferences } from './preferences';
 import { loadAuthor, useBoard } from './use-board';
 import { ticketsOf, type Ticket } from './view-model';
@@ -11,11 +12,18 @@ export interface Scope {
   epic?: string;
 }
 
-export type View = 'board' | 'list' | 'next' | 'standup' | 'graph' | 'settings';
+export type View = 'board' | 'list' | 'next' | 'standup' | 'graph' | 'docs' | 'settings';
 
-function readHash(): { ref?: string; ws?: string; full: boolean } {
+/** A document open in the reader, and where to go back to. */
+export interface OpenDoc {
+  workspaceId: string;
+  link: DocLink;
+  back?: { view: View; ticketUid: string | null };
+}
+
+function readHash(): { ref?: string; ws?: string; full: boolean; doc?: string } {
   const p = new URLSearchParams(location.hash.slice(1));
-  return { ref: p.get('ticket') ?? undefined, ws: p.get('ws') ?? undefined, full: p.get('full') === '1' };
+  return { ref: p.get('ticket') ?? undefined, ws: p.get('ws') ?? undefined, full: p.get('full') === '1', doc: p.get('doc') ?? undefined };
 }
 
 function useBoardState() {
@@ -23,7 +31,8 @@ function useBoardState() {
   const preferences = usePreferences();
   const [mineOnly, setMineOnly] = useState(false);
   const [scope, setScope] = useState<Scope>({});
-  const [view, setView] = useState<View>(() => loadPreferences().defaultView);
+  const [view, setView] = useState<View>(() => (readHash().doc ? 'docs' : loadPreferences().defaultView));
+  const [doc, setDoc] = useState<OpenDoc | null>(null);
   const [search, setSearch] = useState('');
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'github' | 'new-ticket' | 'search' | null>(null);
@@ -58,19 +67,49 @@ function useBoardState() {
     }
     setPendingRef({ full: false });
   }, [tickets, pendingRef]);
+  // #doc=<path> opens that document once its project has loaded.
+  const [pendingDoc, setPendingDoc] = useState(() => readHash());
   useEffect(() => {
-    if (pendingRef.ref) return;
+    if (!pendingDoc.doc || board.workspaces.length === 0) return;
+    const ws = board.workspaces.find((w) => w.store.label === pendingDoc.ws) ?? board.workspaces[0];
+    if (ws) setDoc({ workspaceId: ws.store.id, link: { candidates: [pendingDoc.doc], label: 'document', kind: 'doc' } });
+    setPendingDoc({ full: false });
+  }, [board.workspaces, pendingDoc]);
+  useEffect(() => {
+    if (pendingRef.ref || pendingDoc.doc) return;
+    if (view === 'docs' && doc && !selected) {
+      const ws = board.workspaces.length > 1 ? `&ws=${encodeURIComponent(board.workspaces.find((w) => w.store.id === doc.workspaceId)?.store.label ?? '')}` : '';
+      const hash = `#doc=${encodeURIComponent(doc.link.candidates[0] ?? '')}${ws}`;
+      if (location.hash !== hash) history.replaceState(null, '', hash);
+      return;
+    }
     const ws = selected && board.workspaces.length > 1 ? `&ws=${encodeURIComponent(selected.workspace)}` : '';
     const hash = selected ? `#ticket=${encodeURIComponent(selected.ref)}${ws}${expanded ? '&full=1' : ''}` : '';
     if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
-  }, [selected, expanded, pendingRef, board.workspaces.length]);
+  }, [selected, expanded, pendingRef, pendingDoc, board.workspaces, view, doc]);
+
+  /** Opens a doc in the reader, remembering the view and ticket to come back to. */
+  const openDoc = (workspaceId: string, link: DocLink) => {
+    setDoc({ workspaceId, link, back: view === 'docs' ? doc?.back : { view, ticketUid: selectedUid } });
+    setSelectedUid(null);
+    setExpanded(false);
+    setView('docs');
+  };
+  const closeDoc = () => {
+    const back = doc?.back;
+    setDoc(null);
+    if (back) {
+      setView(back.view);
+      setSelectedUid(back.ticketUid);
+    }
+  };
 
   const select = (uid: string | null) => {
     setSelectedUid(uid);
     if (!uid) setExpanded(false);
   };
 
-  return { board, preferences, mineOnly, setMineOnly, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
+  return { board, doc, setDoc, openDoc, closeDoc, preferences, mineOnly, setMineOnly, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
 }
 
 export type BoardState = ReturnType<typeof useBoardState>;

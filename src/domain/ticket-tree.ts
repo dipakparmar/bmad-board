@@ -1,3 +1,4 @@
+import type { DocLink } from './docs';
 import type { BoardConfig } from './board-config';
 /**
  * Domain model of BMAD-METHOD's ticket tree, the source of truth the board reads and edits.
@@ -113,6 +114,8 @@ export interface Leaf {
   risk?: Risk;
   status: LeafStatus | '';
   state: BoardState;
+  /** Docs it links to: PRD, architecture, UX, plans… from front matter, references and links. */
+  docs?: DocLink[];
   /** Entry and file disagree on `after` or `hitl`. */
   drift?: { after?: { file: TicketKey[]; entry: TicketKey[] }; hitl?: { file: boolean; entry: boolean } };
 }
@@ -137,6 +140,8 @@ export interface Container {
   risk?: Risk;
   /** Planning docs beside it: prd-*, ux-*, architecture-*, retrospectives. */
   companions: string[];
+  /** Docs its file links to, plus the companions. */
+  docs?: DocLink[];
   body: string;
   tracker?: Omit<TrackerLink, 'trackerStatus'>;
 }

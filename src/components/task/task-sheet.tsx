@@ -12,6 +12,8 @@ import { Assignee, ReadinessChip, StateIcon } from '../board/chips';
 import { ActivityList, useHistory } from '../next/activity-feed';
 import { copyHandoff, ticketHandoffs } from '../next/handoff-menu';
 import { Markdown } from './markdown';
+import { KindBadge } from '../docs/docs-view';
+import { DOC_KIND_LABELS, docKind, docTitleFromPath, type DocLink } from '@/domain';
 import { PropertiesRail } from './properties-rail';
 import { TaskDescription } from './task-description';
 
@@ -77,8 +79,42 @@ function TicketActivity({ ticket }: { ticket: Ticket }) {
 }
 
 /** The ticket itself: content plus the properties rail. Used by the sheet and the full-page view. */
+/** Docs the ticket links to, then the ones its epic and initiative link to (PRD, architecture, UX…). */
+function LinkedDocs({ ticket: t }: { ticket: Ticket }) {
+  const { openDoc } = useBoardContext();
+  const groups: { title: string; docs: DocLink[] }[] = [
+    { title: 'This ticket', docs: (t.leaf.docs ?? []).filter((d) => d.kind !== 'plan' || d.candidates[0] !== t.leaf.plan?.path) },
+    { title: t.epic ? `Epic · ${t.epic.title}` : '', docs: t.epic?.docs ?? [] },
+    { title: t.initiative ? `Initiative · ${t.initiative.title}` : '', docs: t.initiative?.docs ?? [] },
+  ].filter((g) => g.title && g.docs.length);
+  if (!groups.length) return null;
+  return (
+    <Section title="Linked docs">
+      <div className="flex flex-col gap-3">
+        {groups.map((g) => (
+          <div key={g.title}>
+            <div className="mb-1.5 truncate text-xs text-muted-foreground">{g.title}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {g.docs.map((d) => {
+                const path = d.candidates[0] ?? '';
+                return (
+                  <button key={`${path}#${d.anchor ?? ''}`} type="button" title={`${path}${d.anchor ? `#${d.anchor}` : ''}`} onClick={() => openDoc(t.workspaceId, d)} className="flex max-w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent">
+                    <KindBadge kind={d.kind} />
+                    <span className="truncate">{docTitleFromPath(path)}{d.anchor ? ` § ${d.anchor}` : ''}</span>
+                    {d.label && !['source', 'companion', 'reference', 'file', 'document', DOC_KIND_LABELS[d.kind].toLowerCase()].includes(d.label) && <span className="text-muted-foreground">· {d.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boolean }) {
-  const { tickets } = useBoardContext();
+  const { tickets, openDoc } = useBoardContext();
   const peers = tickets.filter((x) => x.workspaceId === t.workspaceId);
   return (
     <div key={t.uid} className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -94,6 +130,7 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
           )}
           <PropertiesRail ticket={t} className="-mx-5 mt-4 border-border border-y lg:hidden" />
           <div className="mt-6"><TaskDescription ticket={t} /></div>
+          <LinkedDocs ticket={t} />
           <NextStep ticket={t} />
           <Relations ticket={t} />
           {t.leaf.plan?.body.trim() && (
@@ -105,9 +142,9 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
           <TicketActivity ticket={t} />
           <Section title="Files">
             {[t.leaf.file?.path, t.leaf.plan?.path, t.leaf.folder === 'backlog' ? undefined : `${t.leaf.dir}/tickets.toml`].filter((p): p is string => !!p).map((p) => (
-              <div key={p} className="mb-1 flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span><ArrowUpRight className="ml-auto size-3 shrink-0" />
-              </div>
+              <button key={p} type="button" disabled={p.endsWith('.toml')} title={p.endsWith('.toml') ? p : `Read ${p}`} onClick={() => openDoc(t.workspaceId, { candidates: [p], label: 'file', kind: docKind(p) })} className="mb-1 flex w-full items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-left font-mono text-[11px] text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground">
+                <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span>{!p.endsWith('.toml') && <ArrowUpRight className="ml-auto size-3 shrink-0" />}
+              </button>
             ))}
           </Section>
         </div>

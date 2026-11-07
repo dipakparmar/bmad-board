@@ -8,3 +8,4 @@ export * from './people';
 export * from './labels';
 export * from './graph';
 export * from './board-config';
+export * from './docs';

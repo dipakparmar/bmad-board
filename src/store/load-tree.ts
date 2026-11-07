@@ -25,6 +25,7 @@ import {
   type TrackerKind,
 } from '../domain';
 import { flag, list, parseFrontmatter, str } from './frontmatter';
+import { DOC_KIND_LABELS, docKind, docLinks, type DocLink } from '../domain/docs';
 import { joinPath, type FileSource } from './file-source';
 import { loadV6Tree } from './load-v6';
 
@@ -131,7 +132,8 @@ function leafStatus(value: unknown, where: string, problems: string[]): LeafStat
 }
 
 /** Every ticket in one folder, in build order: entries joined to leaf files, then unlisted leaf files; plans set status. */
-async function loadFolder(src: FileSource, dir: string, folder: string, initiative: string, entries: Toml[], problems: string[]): Promise<RawLeaf[]> {
+async function loadFolder(src: FileSource, dir: string, folder: string, initiative: string, entries: Toml[], problems: string[], initiativeDir?: string): Promise<RawLeaf[]> {
+  const ctx = { baseDir: dir, initiativeDir };
   const rows = new Map<string, RawLeaf>();
   for (const raw of entries) {
     const entry = toEntry(raw);
@@ -173,6 +175,7 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
     row.type = str(data.type) as LeafType;
     row.title = str(data.title) || row.title;
     row.file = { path, body, refined: flag(data.refined), severity: (str(data.severity) || undefined) as never };
+    row.docs = docLinks({ frontmatter: data, body, references: row.entry?.references }, ctx);
     row.hitl = flag(data.hitl);
     row.risk = (str(data.risk) || row.risk) as Risk | undefined;
     row.status = leafStatus(data.status, path, problems);
@@ -204,8 +207,12 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
       body: plan.body,
     } satisfies Plan;
     row.status = status;
+    row.docs = mergeDocs(row.docs ?? docLinks({ references: row.entry?.references }, ctx), [{ candidates: [plan.path], label: 'build plan', kind: 'plan' }], docLinks({ frontmatter: plan.data, body: plan.body }, ctx));
   }
-  for (const row of all) row.state = boardState(row.status, row.tracker?.trackerStatus);
+  for (const row of all) {
+    row.state = boardState(row.status, row.tracker?.trackerStatus);
+    if (!row.docs && row.entry?.references?.length) row.docs = docLinks({ references: row.entry.references }, ctx);
+  }
   return all;
 }
 
@@ -320,11 +327,11 @@ async function loadInitiative(src: FileSource, dir: string, slug: string, proble
     const entries = (Array.isArray(epicBreakdown.entry) ? epicBreakdown.entry : []) as Toml[];
     const file = await readContainer(src, epicDir, epicSlug, problems);
     epicFiles.set(epicSlug, { file, dir: epicDir });
-    raws.push(...(await loadFolder(src, epicTickets, epicSlug, slug, entries, problems)));
+    raws.push(...(await loadFolder(src, epicTickets, epicSlug, slug, entries, problems, dir)));
   }
   if (children.length === 0) {
     const entries = (Array.isArray(breakdown.entry) ? breakdown.entry : []) as Toml[];
-    raws.push(...(await loadFolder(src, ticketsDir, slug, slug, entries, problems)));
+    raws.push(...(await loadFolder(src, ticketsDir, slug, slug, entries, problems, dir)));
   }
 
   const resolve = resolveAfter(raws, epicIds, new Set(children), problems);
@@ -346,9 +353,28 @@ async function loadInitiative(src: FileSource, dir: string, slug: string, proble
       ...(data.tracker_id ? { tracker: { trackerId: str(data.tracker_id), remote: str(data.remote) } } : {}),
     };
   });
-  await Promise.all(base.epics.map(async (e) => { e.companions = await companions(src, dirOf(e.path)); }));
+  await Promise.all(base.epics.map(async (e) => {
+    e.companions = await companions(src, dirOf(e.path));
+    e.docs = containerDocs(e.companions, epicFiles.get(e.slug)?.file ?? null, dir);
+  }));
+  base.docs = containerDocs(base.companions, file, dir);
   base.leaves = leaves.filter((l) => l.folder === slug);
   return base;
+}
+
+function mergeDocs(...lists: DocLink[][]): DocLink[] {
+  const out: DocLink[] = [];
+  for (const l of lists.flat()) if (!out.some((o) => o.candidates[0] === l.candidates[0] && o.anchor === l.anchor)) out.push(l);
+  return out;
+}
+
+/** A container's linked docs: its companions first (prd-*, ux-*…), then what its file links to. */
+function containerDocs(companionDirs: string[], file: ContainerFile | null, initiativeDir: string): DocLink[] {
+  const companions = companionDirs.map((d): DocLink => ({ candidates: [d], label: DOC_KIND_LABELS[docKind(`${d}/`)].toLowerCase(), kind: docKind(`${d}/`) }));
+  const linked = file ? docLinks({ frontmatter: file.data, body: file.body }, { baseDir: dirOf(file.path), initiativeDir }) : [];
+  // A link into a companion folder is that companion; keep the more precise link (it may carry an anchor) in its place.
+  const inside = (l: DocLink, dir: string) => (l.candidates[0] ?? '').startsWith(`${dir}/`);
+  return mergeDocs(companions.map((c) => linked.find((l) => inside(l, c.candidates[0] ?? '')) ?? c), linked);
 }
 
 function dirOf(path: string): string {

@@ -8,6 +8,7 @@ import { SearchCommand } from '@/components/dialogs/search-command';
 import { AppSidebar, SidebarRail } from '@/components/layout/app-sidebar';
 import { ShortcutsDialog } from '@/components/dialogs/shortcuts-dialog';
 import { SettingsView } from '@/components/settings/settings-view';
+import { DocsView } from '@/components/docs/docs-view';
 import { EmptyState } from '@/components/layout/empty-state';
 import { Header } from '@/components/layout/header';
 import { ListView } from '@/components/list-view/list-view';
@@ -66,7 +67,7 @@ function Shell() {
           <>
             <Header />
             <Notices />
-            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : view === 'settings' ? <SettingsView /> : <NextView />}</div>
+            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : view === 'settings' ? <SettingsView /> : view === 'docs' ? <DocsView /> : <NextView />}</div>
           </>
         ) : <EmptyState />}
       </main>

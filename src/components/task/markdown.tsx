@@ -1,12 +1,41 @@
-import ReactMarkdown from 'react-markdown';
+import { Children, isValidElement, type ReactNode } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
+import { headingSlug } from '@/domain';
 import { cn } from '@/lib/cn';
 
-export function Markdown({ source, className }: { source: string; className?: string }) {
+function textOf(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (isValidElement<{ children?: ReactNode }>(node)) return textOf(node.props.children);
+  return '';
+}
+
+/**
+ * Markdown as BMAD writes it. With `onDocLink`, links to other repo files (not web links) open in the
+ * board's reader instead of the browser, and headings get GitHub-style ids so `#anchor` links land.
+ */
+export function Markdown({ source, className, onDocLink }: { source: string; className?: string; onDocLink?: (href: string) => void }) {
+  const seen = new Map<string, number>();
+  const heading = (Tag: 'h1' | 'h2' | 'h3' | 'h4') => ({ node: _n, children, ...props }: { node?: unknown; children?: ReactNode }) => {
+    const base = headingSlug(textOf(Children.toArray(children)).replace(/[*_`]/g, ''));
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return <Tag id={n ? `${base}-${n}` : base} className="scroll-mt-4" {...props}>{children}</Tag>;
+  };
+  const components: Components = {
+    a: ({ node: _n, href, ...props }) => {
+      const local = !!onDocLink && !!href && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('#');
+      if (local) return <a {...props} href={`#doc`} onClick={(e) => { e.preventDefault(); onDocLink(href); }} />;
+      if (href?.startsWith('#')) return <a {...props} href={href} onClick={(e) => { e.preventDefault(); document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth' }); }} />;
+      return <a {...props} href={href} target="_blank" rel="noreferrer" />;
+    },
+    ...(onDocLink ? { h1: heading('h1'), h2: heading('h2'), h3: heading('h3'), h4: heading('h4') } : {}),
+  };
   return (
     <div className={cn('ticket-md', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ a: ({ node: _n, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {source.replace(/<!--[\s\S]*?-->/g, '')}
       </ReactMarkdown>
     </div>
