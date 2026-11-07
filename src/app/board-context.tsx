@@ -22,9 +22,45 @@ export interface OpenDoc {
   back?: { view: View; ticketUid: string | null };
 }
 
-function readHash(): { ref?: string; ws?: string; init?: string; full: boolean; doc?: string; commit?: string } {
-  const p = new URLSearchParams(location.hash.slice(1));
-  return { ref: p.get('ticket') ?? undefined, ws: p.get('ws') ?? undefined, init: p.get('init') ?? undefined, full: p.get('full') === '1', doc: p.get('doc') ?? undefined, commit: p.get('commit') ?? undefined };
+const VIEWS: View[] = ['board', 'list', 'next', 'standup', 'graph', 'docs', 'settings'];
+
+/** Where the board is, as the URL hash holds it. */
+interface Place {
+  view?: View;
+  /** Project label, initiative slug, epic slug: the sidebar scope. */
+  project?: string;
+  initiative?: string;
+  epic?: string;
+  ref?: string;
+  ws?: string;
+  init?: string;
+  full: boolean;
+  doc?: string;
+  commit?: string;
+  /** Dependency view focus, `ticket:<key>` or `epic:<folder>`. */
+  focus?: string;
+}
+
+function readHash(hash = location.hash): Place {
+  const p = new URLSearchParams(hash.slice(1));
+  const get = (k: string) => p.get(k) ?? undefined;
+  const v = get('v') as View | undefined;
+  return {
+    view: get('doc') ? 'docs' : v && VIEWS.includes(v) ? v : undefined,
+    project: get('p'), initiative: get('i'), epic: get('e'),
+    ref: get('ticket'), ws: get('ws'), init: get('init'), full: p.get('full') === '1',
+    doc: get('doc'), commit: get('commit'), focus: get('gf'),
+  };
+}
+
+/**
+ * The part of the hash that is a place to go back to: view, scope, open ticket, doc, commit and graph
+ * focus. A change there adds a browser history entry; a change to filters alone only replaces it.
+ */
+const NAV_KEYS = ['v', 'p', 'i', 'e', 'ticket', 'full', 'doc', 'commit', 'gf'];
+function navOf(hash: string): string {
+  const p = new URLSearchParams(hash.replace(/^#/, ''));
+  return NAV_KEYS.map((k) => `${k}=${p.get(k) ?? ''}`).join('&');
 }
 
 /** A commit open in the commit view. */
@@ -65,7 +101,7 @@ function useBoardState() {
       return { filters: next, chosen: true };
     });
   };
-  const [view, setView] = useState<View>(() => (readHash().doc ? 'docs' : loadPreferences().defaultView));
+  const [view, setView] = useState<View>(() => readHash().view ?? loadPreferences().defaultView);
   const [doc, setDoc] = useState<OpenDoc | null>(null);
   const [commit, setCommit] = useState<OpenCommit | null>(null);
   const [search, setSearch] = useState('');
@@ -100,42 +136,60 @@ function useBoardState() {
   const selected: Ticket | null = tickets.find((t) => t.uid === selectedUid) ?? null;
   const [expanded, setExpanded] = useState(false);
 
-  // The open ticket lives in the URL (#ticket=<ref>&full=1) so a full-page ticket can be linked and survives reloads.
-  const [pendingRef, setPendingRef] = useState(() => readHash());
+  // Where the board is lives in the URL hash, so views, tickets and docs can be linked, survive reloads,
+  // and work with the browser's Back and Forward. `pending` is a place read from the URL that waits for
+  // its projects to load before it can be shown.
+  const [pending, setPending] = useState<Place | null>(() => readHash());
+  const [graphFocus, setGraphFocus] = useState<string | null>(() => readHash().focus ?? null);
   useEffect(() => {
-    if (!pendingRef.ref || tickets.length === 0) return;
-    const hit = tickets.find((t) => t.ref === pendingRef.ref && (!pendingRef.ws || t.workspace === pendingRef.ws) && (!pendingRef.init || t.initiative?.slug === pendingRef.init)) ?? tickets.find((t) => t.ref === pendingRef.ref);
-    if (hit) {
-      setSelectedUid(hit.uid);
-      setExpanded(pendingRef.full);
-    }
-    setPendingRef({ full: false });
-  }, [tickets, pendingRef]);
-  // #doc=<path> opens that document once its project has loaded.
-  const [pendingDoc, setPendingDoc] = useState(() => readHash());
+    if (!pending || board.workspaces.length === 0) return;
+    // Wait for the tickets too when the place names one.
+    if (pending.ref && tickets.length === 0 && board.workspaces.some((w) => !w.tree)) return;
+    const byLabel = (label?: string) => (label ? board.workspaces.find((w) => w.store.label === label || w.store.label.split(' · ')[0] === label) : undefined);
+    const ws = byLabel(pending.project);
+    setScope(ws ? { workspaceId: ws.store.id, initiative: pending.initiative, epic: pending.epic } : {});
+    setView(pending.view ?? loadPreferences().defaultView);
+    setGraphFocus(pending.focus ?? null);
+    const hit = pending.ref
+      ? tickets.find((t) => t.ref === pending.ref && (!pending.ws || t.workspace === pending.ws) && (!pending.init || t.initiative?.slug === pending.init)) ?? tickets.find((t) => t.ref === pending.ref)
+      : undefined;
+    setSelectedUid(hit?.uid ?? null);
+    setExpanded(!!hit && pending.full);
+    const docWs = byLabel(pending.ws) ?? board.workspaces[0];
+    setDoc((cur) => (pending.doc && docWs ? (cur?.link.candidates[0] === pending.doc ? cur : { workspaceId: docWs.store.id, link: { candidates: [pending.doc], label: 'document', kind: 'doc' } }) : null));
+    const commitWs = byLabel(pending.ws) ?? board.workspaces.find((w) => w.store.source.commitDetail) ?? board.workspaces[0];
+    setCommit(pending.commit && commitWs ? { workspaceId: commitWs.store.id, sha: pending.commit } : null);
+    setPending(null);
+  }, [board.workspaces, tickets, pending]);
+  // The dependency view's focus belongs to it; leaving the view drops it.
   useEffect(() => {
-    if (!pendingDoc.doc || board.workspaces.length === 0) return;
-    const ws = board.workspaces.find((w) => w.store.label === pendingDoc.ws) ?? board.workspaces[0];
-    if (ws) setDoc({ workspaceId: ws.store.id, link: { candidates: [pendingDoc.doc], label: 'document', kind: 'doc' } });
-    setPendingDoc({ full: false });
-  }, [board.workspaces, pendingDoc]);
-  // #commit=<sha> opens the commit view once a project with history has loaded.
-  const [pendingCommit, setPendingCommit] = useState(() => readHash().commit);
+    if (view !== 'graph') setGraphFocus(null);
+  }, [view]);
+  // Back and Forward: show the place the URL now holds, filters included.
   useEffect(() => {
-    if (!pendingCommit || board.workspaces.length === 0) return;
-    const ws = board.workspaces.find((w) => w.store.label === readHash().ws) ?? board.workspaces.find((w) => w.store.source.commitDetail) ?? board.workspaces[0];
-    if (ws) setCommit({ workspaceId: ws.store.id, sha: pendingCommit });
-    setPendingCommit(undefined);
-  }, [board.workspaces, pendingCommit]);
+    const onPop = () => {
+      const place = readHash();
+      setPending(place);
+      const f = filtersFromParams(new URLSearchParams(location.hash.slice(1)));
+      setFilterState((s) => ({ filters: f ?? NO_FILTERS, chosen: s.chosen }));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   useEffect(() => {
-    if (pendingRef.ref || pendingDoc.doc || pendingCommit) return;
-    if (view === 'docs' && doc && !selected) {
-      const ws = board.workspaces.length > 1 ? `&ws=${encodeURIComponent(board.workspaces.find((w) => w.store.id === doc.workspaceId)?.store.label ?? '')}` : '';
-      const hash = `#doc=${encodeURIComponent(doc.link.candidates[0] ?? '')}${ws}`;
-      if (location.hash !== hash) history.replaceState(null, '', hash);
-      return;
-    }
+    if (pending) return;
     const p = new URLSearchParams();
+    if (view !== preferences.prefs.defaultView || view === 'docs') p.set('v', view);
+    const scopeWs = board.workspaces.find((w) => w.store.id === scope.workspaceId);
+    if (scopeWs) {
+      p.set('p', scopeWs.store.label.split(' · ')[0] ?? scopeWs.store.label);
+      if (scope.initiative) p.set('i', scope.initiative);
+      if (scope.epic) p.set('e', scope.epic);
+    }
+    if (view === 'docs' && doc) {
+      p.set('doc', doc.link.candidates[0] ?? '');
+      if (board.workspaces.length > 1) p.set('ws', board.workspaces.find((w) => w.store.id === doc.workspaceId)?.store.label ?? '');
+    }
     if (selected) {
       p.set('ticket', selected.ref);
       if (board.workspaces.length > 1) p.set('ws', selected.workspace);
@@ -147,10 +201,14 @@ function useBoardState() {
       p.set('commit', commit.sha);
       if (board.workspaces.length > 1 && !p.has('ws')) p.set('ws', board.workspaces.find((w) => w.store.id === commit.workspaceId)?.store.label ?? '');
     }
+    if (view === 'graph' && graphFocus) p.set('gf', graphFocus);
     filtersToParams(filters, p);
-    const hash = p.size ? `#${p.toString().replaceAll('%2C', ',').replaceAll('%2F', '/')}` : '';
-    if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
-  }, [selected, expanded, pendingRef, pendingDoc, pendingCommit, board.workspaces, view, doc, filters, tickets, commit]);
+    const hash = p.size ? `#${p.toString().replaceAll('%2C', ',').replaceAll('%2F', '/').replaceAll('%3A', ':')}` : '';
+    if (location.hash === hash) return;
+    const url = hash || location.pathname + location.search;
+    if (navOf(location.hash) === navOf(hash)) history.replaceState(null, '', url);
+    else history.pushState(null, '', url);
+  }, [selected, expanded, pending, board.workspaces, view, doc, filters, tickets, commit, scope, graphFocus, preferences.prefs.defaultView]);
 
   /** Opens a doc in the reader, remembering the view and ticket to come back to. */
   const openDoc = (workspaceId: string, link: DocLink) => {
@@ -173,7 +231,7 @@ function useBoardState() {
     if (!uid) setExpanded(false);
   };
 
-  return { board, doc, setDoc, openDoc, commit, openCommit: (workspaceId: string, sha: string) => setCommit({ workspaceId, sha }), closeCommit: () => setCommit(null), closeDoc, preferences, mineOnly, setMineOnly, filters, setFilters, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
+  return { board, doc, setDoc, openDoc, graphFocus, setGraphFocus, commit, openCommit: (workspaceId: string, sha: string) => setCommit({ workspaceId, sha }), closeCommit: () => setCommit(null), closeDoc, preferences, mineOnly, setMineOnly, filters, setFilters, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
 }
 
 export type BoardState = ReturnType<typeof useBoardState>;

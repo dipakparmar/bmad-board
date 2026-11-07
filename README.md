@@ -59,6 +59,7 @@ Run `bmad migrate method` to move a v6 project to the ticket tree and edit it he
 - **Add tickets.** New stories and spikes go into an epic's `tickets.toml`. Bugs go into `backlog/`.
 - **Assign people and agents.** The assignee field suggests people from git history and GitHub contributors, plus anyone already assigned, and still takes any name. Git is scanned once per HEAD (the last 5,000 commits within a year, configurable with `BMAD_BOARD_PEOPLE_COMMITS` and `BMAD_BOARD_PEOPLE_DAYS`), and GitHub's list is cached for six hours.
 - **Open a ticket full screen** from its panel. The URL (`#ticket=1.2&full=1`) links straight to it.
+- **Back and Forward work.** The view, the sidebar scope, the open ticket (and full screen), the document in the reader, the commit view and the dependency view's focus all live in the URL, so each step is a browser history entry and any of them can be shared as a link. Changing filters updates the URL without adding entries.
 - **⌘K** jumps to any ticket. **Copy ref** puts `1.2`-style refs on your clipboard to hand to an agent ("build story 1.2").
 - **Right-click a card** to open it, open it full screen, set its status, or copy its ref or link.
 - **Mine** (or `m`) shows only the tickets assigned to you.

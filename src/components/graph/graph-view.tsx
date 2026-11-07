@@ -214,7 +214,13 @@ function Graph() {
   const [hover, setHover] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('auto');
   /** A ticket whose neighbourhood is shown, or an epic opened from the epic view. */
-  const [focus, setFocus] = useState<{ key: string; kind: 'ticket' | 'epic' } | null>(null);
+  // The focus lives in the URL, so Back returns from an epic or a ticket's neighbourhood.
+  const { graphFocus, setGraphFocus } = useBoardContext();
+  const focus = useMemo(() => {
+    const m = /^(ticket|epic):(.+)$/.exec(graphFocus ?? '');
+    return m ? { kind: m[1] as 'ticket' | 'epic', key: m[2] ?? '' } : null;
+  }, [graphFocus]);
+  const setFocus = useCallback((f: { key: string; kind: 'ticket' | 'epic' } | null) => setGraphFocus(f ? `${f.kind}:${f.key}` : null), [setGraphFocus]);
   const [depth, setDepth] = useState<(typeof DEPTHS)[number]>(2);
   const [full, setFull] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
