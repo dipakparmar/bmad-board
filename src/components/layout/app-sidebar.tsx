@@ -116,7 +116,7 @@ export function AppSidebar() {
                 <div key={i.slug}>
                   <NavItem active={is({ workspaceId: w.store.id, initiative: i.slug })} onClick={() => setScope({ workspaceId: w.store.id, initiative: i.slug })} icon={Target} label={i.title} count={count((t) => t.workspaceId === w.store.id && t.initiative?.slug === i.slug)} />
                   {i.epics.map((e) => (
-                    <NavItem key={e.slug} indent={1} active={is({ workspaceId: w.store.id, initiative: i.slug, epic: e.slug })} onClick={() => setScope({ workspaceId: w.store.id, initiative: i.slug, epic: e.slug })} icon={Layers} label={e.title} count={count((t) => t.workspaceId === w.store.id && t.epic?.slug === e.slug)} />
+                    <NavItem key={e.slug} indent={1} active={is({ workspaceId: w.store.id, initiative: i.slug, epic: e.slug })} onClick={() => setScope({ workspaceId: w.store.id, initiative: i.slug, epic: e.slug })} icon={Layers} label={e.title} count={count((t) => t.workspaceId === w.store.id && t.initiative?.slug === i.slug && t.epic?.slug === e.slug)} />
                   ))}
                 </div>
               ))}

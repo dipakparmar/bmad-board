@@ -13,8 +13,10 @@ import { cn } from '@/lib/cn';
 import { Assignee, HitlChip, RiskChip, StateIcon, TypeChip } from '../board/chips';
 import { ActivityList, useHistory } from './activity-feed';
 import { HandoffMenu } from './handoff-menu';
+import { usePaged } from '../common/show-more';
 
 function Lane({ title, hint, icon: Icon, tone, tickets, children }: { title: string; hint: string; icon: typeof Inbox; tone: string; tickets: Ticket[]; children: (t: Ticket) => ReactNode }) {
+  const { visible, more } = usePaged(tickets, 25);
   return (
     <section className="flex min-h-0 flex-col rounded-xl bg-board-lane">
       <header className="flex items-start gap-2 px-3 pt-3 pb-2">
@@ -25,7 +27,8 @@ function Lane({ title, hint, icon: Icon, tone, tickets, children }: { title: str
         </div>
       </header>
       <div className="flex flex-col gap-1.5 p-1.5">
-        {tickets.map((t) => <div key={t.uid}>{children(t)}</div>)}
+        {visible.map((t) => <div key={t.uid}>{children(t)}</div>)}
+        {more}
         {tickets.length === 0 && <div className="rounded-[10px] border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">Nothing here</div>}
       </div>
     </section>
@@ -65,23 +68,30 @@ function EpicProgress() {
   const { inScope } = useBoardContext();
   const epics = new Map<string, { title: string; counts: Record<string, number>; total: number }>();
   for (const t of inScope) {
-    const k = t.epic?.slug ?? (t.leaf.folder === 'backlog' ? 'backlog' : t.initiative?.slug ?? '');
+    const k = t.epic ? `${t.initiative?.slug}/${t.epic.slug}` : t.leaf.folder === 'backlog' ? 'backlog' : t.initiative?.slug ?? '';
     const e = epics.get(k) ?? { title: t.epic?.title ?? (k === 'backlog' ? 'Backlog' : t.initiative?.title ?? k), counts: {}, total: 0 };
     e.counts[t.leaf.state] = (e.counts[t.leaf.state] ?? 0) + 1;
     e.total += 1;
     epics.set(k, e);
   }
   const segs: [string, string][] = [['done', 'bg-success'], ['review', 'bg-warning'], ['in-progress', 'bg-info'], ['backlog', 'bg-muted-foreground/25']];
+  // Epics with work under way first; a big project shows a few rows and the rest on request.
+  const active = (e: { counts: Record<string, number> }) => (e.counts['in-progress'] ?? 0) + (e.counts.review ?? 0);
+  const sorted = [...epics.entries()].sort(([, a], [, b]) => Number(active(b) > 0) - Number(active(a) > 0));
+  const { visible, more } = usePaged(sorted, 12);
   return (
+    <div className="flex flex-col gap-1">
     <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
-      {[...epics.values()].map((e) => (
-        <div key={e.title} className="flex flex-col gap-1">
+      {visible.map(([key, e]) => (
+        <div key={key} className="flex flex-col gap-1">
           <div className="flex items-center justify-between text-xs"><span className="truncate font-medium">{e.title}</span><span className="tabular-nums text-muted-foreground">{e.counts.done ?? 0}/{e.total}</span></div>
           <div className="flex h-1.5 overflow-hidden rounded-full bg-muted">
             {segs.map(([s, c]) => <span key={s} className={c} style={{ width: `${((e.counts[s] ?? 0) / e.total) * 100}%` }} />)}
           </div>
         </div>
       ))}
+    </div>
+    {more}
     </div>
   );
 }

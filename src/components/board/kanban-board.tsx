@@ -1,4 +1,5 @@
 /** Kaneo-style board: four lanes fixed by BMAD's board states. Dropping a card writes the matching status. */
+import { usePaged } from '../common/show-more';
 import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -13,6 +14,7 @@ import { TaskCard, TaskCardBody } from './task-card';
 function Column({ state, tickets, limit }: { state: BoardState; tickets: Ticket[]; limit?: number }) {
   const { setNodeRef, isOver } = useDroppable({ id: state });
   const over = limit !== undefined && tickets.length > limit;
+  const { visible, more } = usePaged(tickets, 40);
   return (
     <div ref={setNodeRef} className={cn('relative flex h-full min-h-0 w-full flex-col rounded-xl bg-board-lane transition-colors duration-150', isOver && 'ring-2 ring-board-card-ring')}>
       <div className="flex h-9 shrink-0 items-center gap-2 pt-1 pr-2 pl-3">
@@ -24,7 +26,8 @@ function Column({ state, tickets, limit }: { state: BoardState; tickets: Ticket[
         {over && <span className="ml-auto rounded bg-destructive/10 px-1.5 text-[11px] text-destructive">Over limit</span>}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden p-1.5">
-        {tickets.map((t) => <TaskCard key={t.uid} ticket={t} />)}
+        {visible.map((t) => <TaskCard key={t.uid} ticket={t} />)}
+        {more}
         {tickets.length === 0 && <div className="rounded-[10px] border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">No tickets</div>}
       </div>
     </div>

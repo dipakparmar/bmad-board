@@ -1,6 +1,7 @@
 /** Talks to `server/index.ts`: reads files, writes them as one git commit, and streams change events. */
 import { membersFromGitLog, type ChangeAuthor, type ChangeResult, type Member, type StoreCapabilities } from '../../domain';
 import type { Activity, FileEntry, FileWrite } from '../file-source';
+import { cacheGet, cacheSet } from '../cache';
 import { readThroughCache, snapshotFromFiles, underPrefixes, type Snapshot, type SnapshotSource } from '../snapshot';
 
 export interface ServerInfo {
@@ -54,10 +55,34 @@ export class LocalServerSource implements SnapshotSource {
       .then(async (res) => {
         if (!res.ok) return null;
         const t = (await res.json()) as { at: string; covered: string[]; files: [string, string][] };
-        return t.covered.length ? snapshotFromFiles(t.at, t.files, underPrefixes(t.covered)) : null;
+        if (!t.covered.length) return null;
+        await this.prefetch(t.files);
+        return snapshotFromFiles(t.at, t.files, underPrefixes(t.covered));
       })
       .catch(() => null);
     return this.snap;
+  }
+
+  /**
+   * On a cold cache, fetches the BMAD text files the cache lacks in a few large requests rather than one
+   * request per file, so a project of thousands of tickets opens in seconds.
+   */
+  private async prefetch(files: [string, string][]) {
+    const wanted = files.filter(([p]) => /\.(md|toml|ya?ml)$/i.test(p));
+    const missing: [string, string][] = [];
+    for (const [p, sha] of wanted) if ((await cacheGet<string>(`blob:${sha}`)) === undefined) missing.push([p, sha]);
+    if (missing.length < 20) return; // a few files read one by one just as fast
+    const sha = new Map(missing);
+    for (let i = 0; i < missing.length; i += 1000) {
+      const res = await fetch(`${this.base}/api/read-many`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-bmad-board': '1' },
+        body: JSON.stringify({ paths: missing.slice(i, i + 1000).map(([p]) => p) }),
+      }).catch(() => null);
+      if (!res?.ok) return; // an older server: reads fall back to one by one
+      const texts = (await res.json()) as Record<string, string | null>;
+      for (const [p, text] of Object.entries(texts)) if (text !== null) void cacheSet(`blob:${sha.get(p)}`, text);
+    }
   }
 
   invalidate() {

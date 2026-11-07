@@ -1,9 +1,10 @@
 /** Kaneo-style list, grouped by epic in build order. Dragging rows inside an epic rewrites its tickets.toml order. */
+import { usePaged } from '../common/show-more';
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, GripVertical } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { applyWithToast } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import type { Ticket } from '@/app/view-model';
@@ -74,6 +75,8 @@ function GroupSection({ group }: { group: Group }) {
   const ids = order ?? group.tickets.map((t) => t.uid);
   const byUid = new Map(group.tickets.map((t) => [t.uid, t]));
   const rows = ids.map((id) => byUid.get(id)).filter((t): t is Ticket => !!t);
+  // Rows come a page at a time; the hidden ones stay in `ids`, so reordering keeps them in place.
+  const { visible, more } = usePaged(rows, 50);
 
   async function onDragEnd(e: DragEndEvent) {
     if (!e.over || e.active.id === e.over.id) return;
@@ -94,9 +97,10 @@ function GroupSection({ group }: { group: Group }) {
       </button>
       {open && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void onDragEnd(e)}>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            {rows.map((t) => <Row key={t.uid} ticket={t} sortable={group.sortable && !state.search} />)}
+          <SortableContext items={visible.map((t) => t.uid)} strategy={verticalListSortingStrategy}>
+            {visible.map((t) => <Row key={t.uid} ticket={t} sortable={group.sortable && !state.search} />)}
           </SortableContext>
+          {more}
         </DndContext>
       )}
     </section>
@@ -105,5 +109,7 @@ function GroupSection({ group }: { group: Group }) {
 
 export function ListView() {
   const { inScope } = useBoardContext();
-  return <div className="flex flex-col gap-3 pb-6">{groupsOf(inScope).map((g) => <GroupSection key={g.id} group={g} />)}</div>;
+  const groups = useMemo(() => groupsOf(inScope), [inScope]);
+  const { visible, more } = usePaged(groups, 30);
+  return <div className="flex flex-col gap-3 pb-6">{visible.map((g) => <GroupSection key={g.id} group={g} />)}{more}</div>;
 }

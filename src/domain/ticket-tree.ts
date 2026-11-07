@@ -177,6 +177,8 @@ export interface Initiative extends Container {
 }
 
 export interface Epic extends Container {
+  /** The epic as ticket keys name it: its slug, or `<initiative>/<slug>` when another initiative has an epic of the same name. */
+  key?: string;
   type: 'epic';
   leaves: Leaf[];
   /** v6: the epic's retrospective, from `epic-N-retrospective` in sprint-status.yaml. */

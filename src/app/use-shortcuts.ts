@@ -16,7 +16,9 @@ export const SHORTCUTS: { keys: string[]; label: string; group: 'Go to' | 'Actio
   { keys: ['c'], label: 'New ticket', group: 'Actions' },
   { keys: ['m'], label: 'Only my tickets, on or off', group: 'Actions' },
   { keys: ['f'], label: 'Open the open ticket full screen', group: 'Actions' },
-  { keys: ['/'], label: 'Filter tickets', group: 'Actions' },
+  { keys: ['/'], label: 'Find in titles', group: 'Actions' },
+  { keys: ['x'], label: 'Open the filters', group: 'Actions' },
+  { keys: ['h'], label: 'Hide or show done tickets', group: 'Actions' },
   { keys: ['⌘', 'K'], label: 'Jump to a ticket', group: 'General' },
   { keys: ['['], label: 'Show or hide the sidebar', group: 'General' },
   { keys: ['?'], label: 'This list', group: 'General' },
@@ -54,7 +56,9 @@ export function useShortcuts(state: BoardState, onHelp: () => void) {
       else if (k === 'c') { s.setDialog('new-ticket'); e.preventDefault(); }
       else if (k === 'm') s.setMineOnly((v) => !v);
       else if (k === 'f' && s.selected) s.setExpanded(true);
-      else if (k === '/') { document.querySelector<HTMLInputElement>('input[placeholder="Filter tickets"]')?.focus(); e.preventDefault(); }
+      else if (k === '/') { document.querySelector<HTMLInputElement>('input[placeholder="Find in titles"]')?.focus(); e.preventDefault(); }
+      else if (k === 'x') { document.querySelector<HTMLElement>('[data-filter-trigger]')?.click(); e.preventDefault(); }
+      else if (k === 'h') s.setFilters((f) => ({ ...f, hideDone: !f.hideDone }));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

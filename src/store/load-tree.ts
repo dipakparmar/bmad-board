@@ -439,10 +439,47 @@ export async function loadTicketTree(src: FileSource): Promise<TicketTree> {
   }
   const backlogRaw = hasBacklog ? await loadFolder(src, backlogDir, 'backlog', '', [], problems) : [];
   const backlog = finish(backlogRaw, resolveAfter(backlogRaw, new Map(), new Set(), problems), new Map());
+  qualifyRepeatedEpics(initiatives);
   // Active initiative first, as BMAD's `next` reports it.
   initiatives.sort((a, b) => Number(b.slug === config.activeInitiative) - Number(a.slug === config.activeInitiative));
   const board = await readBoardConfig(src, problems);
   return { projectRoot: '', outputFolder: config.outputFolder, activeInitiative: config.activeInitiative, tracker: config.tracker, initiatives, backlog, layout: 'ticket-tree', problems, board };
+}
+
+/**
+ * Epic slugs are unique inside an initiative, not across them, and ticket keys are `<epic>/<id>`. When two
+ * initiatives both have, say, `epic-foundation`, their keys get the initiative in front
+ * (`initiative-a/epic-foundation/3`) so every ticket stays distinct. Projects without repeats keep short keys.
+ */
+function qualifyRepeatedEpics(initiatives: Initiative[]) {
+  const count = new Map<string, number>();
+  for (const i of initiatives) for (const e of i.epics) count.set(e.slug, (count.get(e.slug) ?? 0) + 1);
+  for (const i of initiatives) {
+    const repeated = i.epics.filter((e) => (count.get(e.slug) ?? 0) > 1).map((e) => e.slug);
+    if (!repeated.length) continue;
+    const q = (k: TicketKey): TicketKey => (repeated.some((s) => k === s || k.startsWith(`${s}/`)) ? `${i.slug}/${k}` : k);
+    const qs = (ks: TicketKey[] | undefined) => ks?.map(q);
+    for (const e of i.epics) {
+      if (repeated.includes(e.slug)) e.key = q(e.slug);
+      e.gates = e.gates.map(q);
+      for (const l of e.leaves) {
+        l.key = q(l.key);
+        l.folder = q(l.folder);
+        l.after = l.after.map(q);
+        l.gatedBy = l.gatedBy.map(q);
+        if (l.drift?.after) l.drift.after = { file: l.drift.after.file.map(q), entry: l.drift.after.entry.map(q) };
+        if (l.links) {
+          const { noted, previous, epicAfter, epicNoted, previousEpic, sequential } = l.links;
+          l.links = { noted: qs(noted), previous: previous && q(previous), epicAfter: qs(epicAfter), epicNoted: qs(epicNoted), previousEpic: previousEpic && q(previousEpic), sequential };
+          for (const k of Object.keys(l.links) as (keyof LeafLinks)[]) if (l.links[k] === undefined) delete l.links[k];
+        }
+      }
+    }
+    for (const l of i.leaves) {
+      l.after = l.after.map(q);
+      l.gatedBy = l.gatedBy.map(q);
+    }
+  }
 }
 
 /** Every leaf in the tree, initiatives first in their build order, then the backlog. */
@@ -452,5 +489,5 @@ export function allLeaves(tree: TicketTree): Leaf[] {
 
 /** Epic slugs whose own status is done, which an epic gate waits on. */
 export function doneContainers(tree: TicketTree): string[] {
-  return tree.initiatives.flatMap((i) => i.epics.filter((e) => e.status === 'done').map((e) => e.slug));
+  return tree.initiatives.flatMap((i) => i.epics.filter((e) => e.status === 'done').map((e) => e.key ?? e.slug));
 }

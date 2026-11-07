@@ -216,3 +216,63 @@ export function afterWithout(target: Linkable, prereq: Linkable): AfterRef[] {
     return true;
   });
 }
+
+/** One epic in the epic-level view: its tickets, rolled up. */
+export interface EpicNode<T> {
+  folder: string;
+  items: T[];
+}
+
+/** Links between epics, rolled up from the ticket links that cross them. */
+export interface EpicEdge {
+  from: string;
+  to: string;
+  /** How many ticket links it stands for, and of which kinds. */
+  count: number;
+  kinds: EdgeKind[];
+}
+
+/**
+ * The epic-level view of a ticket graph, for projects too big to draw ticket by ticket: one node per
+ * epic (or folder), one edge per pair of epics with any link between their tickets.
+ */
+export function epicGraph<T extends { leaf: Leaf }>(items: T[], edges: GraphEdge[]): { nodes: EpicNode<T>[]; edges: EpicEdge[] } {
+  const folderOf = new Map(items.map((i) => [i.leaf.key, i.leaf.folder]));
+  const nodes = new Map<string, EpicNode<T>>();
+  for (const i of items) {
+    const n = nodes.get(i.leaf.folder);
+    if (n) n.items.push(i);
+    else nodes.set(i.leaf.folder, { folder: i.leaf.folder, items: [i] });
+  }
+  const out = new Map<string, EpicEdge>();
+  for (const e of edges) {
+    const from = folderOf.get(e.from);
+    const to = folderOf.get(e.to);
+    if (!from || !to || from === to) continue;
+    const id = `${from}>${to}`;
+    const ee = out.get(id) ?? { from, to, count: 0, kinds: [] };
+    ee.count++;
+    if (!ee.kinds.includes(e.kind)) ee.kinds.push(e.kind);
+    out.set(id, ee);
+  }
+  return { nodes: [...nodes.values()], edges: [...out.values()] };
+}
+
+/** Keys within `depth` links of `key`, either way (the ticket's neighbourhood). */
+export function neighbourhood(key: TicketKey, edges: GraphEdge[], depth: number): Set<TicketKey> {
+  const seen = new Set([key]);
+  let frontier = new Set([key]);
+  for (let d = 0; d < depth && frontier.size; d++) {
+    const next = new Set<TicketKey>();
+    for (const e of edges) {
+      for (const [a, b] of [[e.from, e.to], [e.to, e.from]] as const) {
+        if (frontier.has(a) && !seen.has(b)) {
+          seen.add(b);
+          next.add(b);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return seen;
+}

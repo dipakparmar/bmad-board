@@ -74,3 +74,16 @@ describe('editing dependencies', () => {
     expect(cannotLink(t('a/3', '1.3'), a1, edges)).toBeNull();
   });
 });
+
+describe('big graphs', () => {
+  test('rolls ticket links up to epics, and finds a ticket\'s neighbourhood', async () => {
+    const { epicGraph, neighbourhood } = await import('./graph');
+    const items = [leaf('a/1'), leaf('a/2', ['a/1']), leaf('b/1', ['a/2']), leaf('b/2', ['a/1', 'b/1']), leaf('c/1', ['b/2'])];
+    const g = dependencyGraph(items);
+    const eg = epicGraph(items, g.edges);
+    expect(eg.nodes.map((n) => [n.folder, n.items.length])).toEqual([['a', 2], ['b', 2], ['c', 1]]);
+    expect(eg.edges).toEqual([{ from: 'a', to: 'b', count: 2, kinds: ['after'] }, { from: 'b', to: 'c', count: 1, kinds: ['after'] }]);
+    expect([...neighbourhood('b/1', g.edges, 1)].sort()).toEqual(['a/2', 'b/1', 'b/2']);
+    expect(neighbourhood('b/1', g.edges, 9).size).toBe(5);
+  });
+});

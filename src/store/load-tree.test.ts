@@ -92,3 +92,23 @@ describe('loadTicketTree on the v6 layout', () => {
     expect(tree.problems).toEqual([]);
   });
 });
+
+describe('loadTicketTree with several initiatives', () => {
+  test('keeps tickets apart when two initiatives have an epic of the same name', async () => {
+    const { MemorySource } = await import('./file-source');
+    const files: Record<string, string> = { '_bmad/config.toml': '[core]\noutput_folder = "_bmad-output"\n' };
+    for (const init of ['initiative-a', 'initiative-b']) {
+      files[`_bmad-output/${init}/${init}.md`] = `---\ntype: initiative\ntitle: "${init}"\n---\n`;
+      files[`_bmad-output/${init}/tickets/tickets.toml`] = '[[epic]]\nid = 1\nslug = "epic-foundation"\ntitle = "Foundation"\n';
+      files[`_bmad-output/${init}/tickets/epic-foundation/epic-foundation.md`] = '---\ntype: epic\ntitle: "Foundation"\nafter: []\n---\n';
+      files[`_bmad-output/${init}/tickets/epic-foundation/tickets/tickets.toml`] = '[[entry]]\nid = 1\ntype = "story"\ntitle = "One"\nafter = []\n\n[[entry]]\nid = 2\ntype = "story"\ntitle = "Two"\nafter = [1]\n';
+    }
+    const tree = await loadTicketTree(new MemorySource(files, 'm', 'm'));
+    const keys = allLeaves(tree).map((l) => [l.key, l.after]);
+    expect(keys).toEqual([
+      ['initiative-a/epic-foundation/1', []], ['initiative-a/epic-foundation/2', ['initiative-a/epic-foundation/1']],
+      ['initiative-b/epic-foundation/1', []], ['initiative-b/epic-foundation/2', ['initiative-b/epic-foundation/1']],
+    ]);
+    expect(tree.initiatives[1]?.epics[0]?.key).toBe('initiative-b/epic-foundation');
+  });
+});

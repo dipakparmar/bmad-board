@@ -37,6 +37,8 @@ Run `bmad migrate method` to move a v6 project to the ticket tree and edit it he
 
 - **Docs** reads the project's planning and implementation documents in the board: PRDs, architecture, UX, epics, sprint status, retrospectives, stand-up notes and the project's `docs/` folder, with an outline, front matter details, and links between docs that open in place. Every ticket lists its **Linked docs**, gathered from what BMAD records: `sources`, `companions` and plan `context` front matter, tickets.toml `references` (with `#anchor`s that jump to the section), a `## References` section, `[Source: …]` citations and markdown links, plus the PRD, UX and architecture folders beside its epic and initiative. **Back to 1.2** returns to the ticket.
 
+- **Filters** (the Filter button, or `x`) apply to every view at once: status, readiness (ready, refine first, blocked, being worked on), people or agents, specific people, type, risk, initiative and epic, needs a person, and hide done (`h`). They sit in the URL, so a filtered view is a link you can share, and the last ones you used come back next time. A project of more than 300 tickets opens with done tickets hidden.
+- **Big projects** stay quick: long lanes, columns and lists show a page at a time, the dependency view opens on epics (one card per epic, one arrow per pair of epics with a count) once more than 300 tickets would be drawn, clicking an epic opens its tickets and the tickets they link to, and double-clicking a ticket shows only its neighbourhood, one to three steps or the whole chain. The dependency view has a full-screen mode. A cold start reads the project's BMAD files in a few large requests; after that the cache makes reloads near-instant. Tested on a generated 2,110-ticket project.
 - **Board and list views** of every initiative, epic and backlog ticket, in the Kaneo layout. Each card shows readiness the way BMAD's own `tickets.py next` reports it: ready, blocked (and on what), or needs refining.
 - **Drag a card between lanes** to set its status, or pick one in the ticket sheet. **Drag rows in the list** to change an epic's build order.
 - **Edit tickets.** You can change the description, risk, needs-a-person and assignee, and block or unblock a ticket with a reason.
@@ -46,7 +48,7 @@ Run `bmad migrate method` to move a v6 project to the ticket tree and edit it he
 - **⌘K** jumps to any ticket. **Copy ref** puts `1.2`-style refs on your clipboard to hand to an agent ("build story 1.2").
 - **Right-click a card** to open it, open it full screen, set its status, or copy its ref or link.
 - **Mine** (or `m`) shows only the tickets assigned to you.
-- **Keyboard shortcuts**, after Kaneo's: `g` then `n`/`b`/`l`/`d`/`u`/`s` to switch views, `c` for a new ticket, `/` to filter, `[` to fold the sidebar, and `?` for the full list.
+- **Keyboard shortcuts**, after Kaneo's: `g` then `n`/`b`/`l`/`d`/`u`/`s` to switch views, `c` for a new ticket, `/` to find in titles, `x` for filters, `h` to hide done tickets, `[` to fold the sidebar, and `?` for the full list.
 - **Settings** has two scopes:
   - *Yours*, kept in this browser: theme, which fields cards show (with a live preview), compact cards, the Done column, the view the board opens on, the sidebar, and the stand-up range.
   - *The project's*, committed to `_bmad/custom/bmad-board.toml` for the whole team and its agents: work-in-progress limits per column (a column over its limit is flagged), names that are agents, and people to leave out of suggestions and stand-up, such as CI users.

@@ -349,6 +349,22 @@ const server = Bun.serve({
         }
         case 'GET /api/log':
           return json(await history(path, Number(url.searchParams.get('limit') ?? 30)));
+        case 'POST /api/read-many': {
+          // Many files in one request: the browser fills its cache with these on a cold start.
+          const { paths } = (await req.json()) as { paths: string[] };
+          if (!Array.isArray(paths) || paths.length > 2000) throw new HttpError(400, 'paths: up to 2000');
+          const out: Record<string, string | null> = {};
+          await Promise.all(paths.map(async (p) => {
+            try {
+              const full = inside(root, String(p));
+              out[p] = (await stat(full)).size > 2_000_000 ? null : await readFile(full, 'utf8');
+            } catch (e) {
+              if (e instanceof HttpError) throw e;
+              out[p] = null;
+            }
+          }));
+          return json(out);
+        }
         case 'GET /api/tree':
           return json(await tree());
         case 'GET /api/people':

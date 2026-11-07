@@ -180,7 +180,7 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
 function folderTicketsDir(tree: TicketTree, folder: string): string {
   for (const i of tree.initiatives) {
     if (i.slug === folder) return joinPath(i.path.slice(0, i.path.lastIndexOf('/')), 'tickets');
-    const epic = i.epics.find((e) => e.slug === folder);
+    const epic = i.epics.find((e) => (e.key ?? e.slug) === folder);
     if (epic) return joinPath(epic.path.slice(0, epic.path.lastIndexOf('/')), 'tickets');
   }
   throw new ChangeError(`No epic or initiative ${folder}`);

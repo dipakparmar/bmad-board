@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { cn } from '@/lib/cn';
+import { ActiveFilters, FilterMenu } from './filter-bar';
 
 const VIEWS: { id: View; label: string; icon: typeof List }[] = [
   { id: 'next', label: "What's next", icon: Workflow },
@@ -51,8 +52,10 @@ export function Header() {
           ))}
         </div>
         <Button size="sm" variant={mineOnly ? 'secondary' : 'ghost'} className={cn('ml-auto', mineOnly ? '' : 'text-muted-foreground')} aria-pressed={mineOnly} title="Only tickets assigned to you (m)" onClick={() => setMineOnly((v) => !v)}><UserRound />Mine</Button>
-        <Input size="sm" className="w-56" placeholder="Filter tickets" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <FilterMenu />
+        <Input size="sm" className="w-56" placeholder="Find in titles" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
+      <ActiveFilters />
     </header>
   );
 }
