@@ -33,6 +33,26 @@ export function changedByOf(body: string): string | undefined {
   return /^Changed-by:\s*(\S+)/m.exec(body)?.[1];
 }
 
+/** One commit in full: who, when, why, and what it changed. Paths are relative to the project root. */
+export interface CommitDetail extends Activity {
+  body: string;
+  files: { status: string; path: string }[];
+  /** Branches that contain it, when the source knows (local git). */
+  branches?: string[];
+}
+
+/** Where the project lives, so file, commit and branch links can open on the host or in an editor. */
+export interface RepoLinks {
+  /** The repo's web page, e.g. https://github.com/owner/repo, when it has one. */
+  web?: string;
+  /** The branch the board reads. */
+  branch?: string;
+  /** The project's folder inside the repo ('' at the top). */
+  dir: string;
+  /** The project's folder on this computer, for editor links. */
+  localRoot?: string;
+}
+
 export interface FileSource {
   readonly id: string;
   readonly label: string;
@@ -46,6 +66,10 @@ export interface FileSource {
   watch?(onChange: () => void): () => void;
   /** Recent commits touching a path (a folder or file), newest first. */
   history?(path: string, limit?: number): Promise<Activity[]>;
+  /** One commit with its changed files. */
+  commitDetail?(sha: string): Promise<CommitDetail>;
+  /** Where links to this project's files and commits go. */
+  links?(): RepoLinks;
   /** People and agents who work on the project, from git or the host. Bounded and cached by the source. */
   people?(): Promise<Member[]>;
 }

@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { applyWithToast } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import { CARD_FIELDS, type CardField, type ViewId } from '@/app/preferences';
+import type { LinkPreferences } from '@/app/links';
 import { useTheme } from '@/app/use-theme';
 import { BOARD_CONFIG_PATH, DEFAULT_BOARD_CONFIG, type BoardConfig } from '@/domain';
 import { Button } from '@/components/ui/button';
@@ -106,6 +107,8 @@ function YouSettings() {
         </div>
       </Card>
 
+      <LinkSettings />
+
       <Card title="Board" footer={<Button size="sm" variant="ghost" onClick={reset}><RotateCcw />Reset your settings</Button>}>
         <Row label="Open on" help="The view the board starts in."><Segmented label="Default view" value={prefs.defaultView} onChange={(v) => update({ defaultView: v })} options={VIEW_OPTIONS} /></Row>
         <Row label="Done column" help="Hide it to focus the board on open work."><Toggle label="Show the Done column" on={prefs.showDoneColumn} onChange={(v) => update({ showDoneColumn: v })} /></Row>
@@ -115,6 +118,39 @@ function YouSettings() {
         </Row>
       </Card>
     </>
+  );
+}
+
+/** Where file, commit and branch links open, and what each project can reach. */
+function LinkSettings() {
+  const { preferences, board } = useBoardContext();
+  const { prefs, update } = preferences;
+  const set = (patch: Partial<LinkPreferences>) => update((p) => ({ links: { ...p.links, ...patch } }));
+  const reach = board.workspaces.map((w) => ({ label: w.store.label, links: w.store.links(), commits: !!w.store.source.commitDetail }));
+  return (
+    <Card title="Links" description="Where file, commit and branch links open. When a project can't reach the choice (no GitHub remote, or not on this computer), links fall back to GitHub, then to the board.">
+      <Row label="Files" help="Ticket files, plans, tickets.toml, epic and initiative files.">
+        <Segmented label="Open files in" value={prefs.links.files} onChange={(v) => set({ files: v })} options={[{ id: 'board', label: 'Board reader' }, { id: 'github', label: 'GitHub' }, { id: 'vscode', label: 'VS Code' }, { id: 'cursor', label: 'Cursor' }]} />
+      </Row>
+      <Row label="Commits" help="The board's commit view lists the tickets a commit touched.">
+        <Segmented label="Open commits in" value={prefs.links.commits} onChange={(v) => set({ commits: v })} options={[{ id: 'board', label: 'Board' }, { id: 'github', label: 'GitHub' }]} />
+      </Row>
+      <Row label="Branches" help="Open the branch on GitHub, or copy a git switch command.">
+        <Segmented label="Branch links" value={prefs.links.branches} onChange={(v) => set({ branches: v })} options={[{ id: 'github', label: 'GitHub' }, { id: 'copy', label: 'Copy command' }]} />
+      </Row>
+      {reach.length > 0 && (
+        <div className="flex flex-col gap-1 px-5 py-3 text-xs text-muted-foreground">
+          {reach.map((r) => (
+            <div key={r.label} className="flex flex-wrap gap-x-2">
+              <span className="font-medium text-foreground">{r.label}</span>
+              <span>· GitHub {r.links?.web ? <a className="underline-offset-2 hover:underline" href={r.links.web} target="_blank" rel="noreferrer">{r.links.web.replace(/^https:\/\//, '')}</a> : 'not found'}</span>
+              <span>· editor {r.links?.localRoot ? <code className="font-mono">{r.links.localRoot}</code> : 'not on this computer'}</span>
+              <span>· commit view {r.commits ? 'yes' : 'no'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 

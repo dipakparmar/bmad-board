@@ -16,6 +16,7 @@ import { NextView } from '@/components/next/next-view';
 import { StandupView } from '@/components/standup/standup-view';
 import { GraphView } from '@/components/graph/graph-view';
 import { TaskSheet, TicketPage } from '@/components/task/task-sheet';
+import { CommitDialog } from '@/components/commit/commit-dialog';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { BoardProvider, useBoardContext } from './board-context';
 import { useShortcuts } from './use-shortcuts';
@@ -72,6 +73,7 @@ function Shell() {
         ) : <EmptyState />}
       </main>
       <TaskSheet />
+      <CommitDialog />
       <GitHubDialog />
       <NewTicketDialog />
       <SearchCommand />

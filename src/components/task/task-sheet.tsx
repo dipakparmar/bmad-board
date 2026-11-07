@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { useBoardContext } from '@/app/board-context';
-import { refOf, type Ticket } from '@/app/view-model';
+import { bodyOf, refOf, type Ticket } from '@/app/view-model';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetPopup, SheetTitle } from '@/components/ui/sheet';
 import { Bot } from 'lucide-react';
@@ -13,8 +13,9 @@ import { ActivityList, useHistory } from '../next/activity-feed';
 import { copyHandoff, ticketHandoffs } from '../next/handoff-menu';
 import { Markdown } from './markdown';
 import { KindBadge } from '../docs/docs-view';
-import { DOC_KIND_LABELS, docKind, docTitleFromPath, type DocLink } from '@/domain';
+import { DOC_KIND_LABELS, docTitleFromPath, type DocLink } from '@/domain';
 import { PropertiesRail } from './properties-rail';
+import { BranchLink, FileLink, useTicketRefs } from '../common/links';
 import { TaskDescription } from './task-description';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -24,6 +25,17 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       {children}
     </section>
   );
+}
+
+/** Tickets whose text names this one: `Story 1.2` in the same initiative, or its file name. */
+function mentionsOf(ticket: Ticket, peers: Ticket[]): Ticket[] {
+  const name = ticket.leaf.file?.path.split('/').pop()?.replace(/\.md$/, '');
+  const ref = new RegExp(String.raw`\b(?:stor(?:y|ies)|spike|bug|ticket)[ \t]+#?${ticket.ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\w.])`, 'i');
+  return peers.filter((t) => {
+    if (t.uid === ticket.uid) return false;
+    const text = `${bodyOf(t.leaf) ?? ''}\n${t.leaf.plan?.body ?? ''}`;
+    return (!!name && text.includes(name)) || (t.initiative?.slug === ticket.initiative?.slug && /^\d+\.\d+/.test(ticket.ref) && ref.test(text));
+  });
 }
 
 function Relations({ ticket }: { ticket: Ticket }) {
@@ -37,7 +49,8 @@ function Relations({ ticket }: { ticket: Ticket }) {
   const epicWaits = [...ticket.leaf.gatedBy, ...(links.epicAfter ?? []), ...(links.epicNoted ?? [])];
   const previous = links.previous ? find(links.previous) : undefined;
   const following = peers.find((t) => t.leaf.links?.previous === ticket.leaf.key);
-  if (!waitsOn.length && !noted.length && !blocks.length && !epicWaits.length && !previous && !following) return null;
+  const mentions = mentionsOf(ticket, peers).filter((t) => !blocks.includes(t));
+  if (!waitsOn.length && !noted.length && !blocks.length && !epicWaits.length && !previous && !following && !mentions.length) return null;
   const item = (key: string, note?: string) => {
     const t = find(key);
     return (
@@ -66,6 +79,7 @@ function Relations({ ticket }: { ticket: Ticket }) {
         </div>
       )}
       {group('Blocks', blocks.map((t) => t.leaf.key))}
+      {group('Mentioned in', mentions.slice(0, 30).map((t) => t.leaf.key))}
       {(previous || following) && group('Build order', [previous?.leaf.key, following?.leaf.key].filter((k): k is string => !!k), (k) => (k === previous?.leaf.key ? (links.sequential ? 'before it, must be done first' : 'before it') : 'after it'))}
     </Section>
   );
@@ -97,7 +111,7 @@ function TicketActivity({ ticket }: { ticket: Ticket }) {
   const paths = [ticket.leaf.file?.path, ticket.leaf.plan?.path].filter((p): p is string => !!p);
   const items = useHistory(ticket.workspaceId, paths, 15);
   if (paths.length === 0) return null;
-  return <Section title="Activity">{items === null ? <p className="text-xs text-muted-foreground">Loading…</p> : <ActivityList items={items} empty="No commits for this ticket yet." />}</Section>;
+  return <Section title="Activity">{items === null ? <p className="text-xs text-muted-foreground">Loading…</p> : <ActivityList items={items} workspaceId={ticket.workspaceId} empty="No commits for this ticket yet." />}</Section>;
 }
 
 /** The ticket itself: content plus the properties rail. Used by the sheet and the full-page view. */
@@ -136,7 +150,7 @@ function LinkedDocs({ ticket: t }: { ticket: Ticket }) {
 }
 
 export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boolean }) {
-  const { tickets, openDoc } = useBoardContext();
+  const { tickets } = useBoardContext();
   const peers = tickets.filter((x) => x.workspaceId === t.workspaceId);
   return (
     <div key={t.uid} className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -158,15 +172,15 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
           {t.leaf.plan?.body.trim() && (
             <Section title="Build plan">
               <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Assignee name={t.leaf.plan.assignee} />{t.leaf.plan.assignee ?? 'No assignee'} · {t.leaf.plan.path.split('/').pop()}</div>
-              <Markdown source={t.leaf.plan.body} />
+              <PlanBody ticket={t} />
             </Section>
           )}
           <TicketActivity ticket={t} />
           <Section title="Files">
             {[t.leaf.file?.path, t.leaf.plan?.path, t.leaf.folder === 'backlog' ? undefined : `${t.leaf.dir}/tickets.toml`].filter((p): p is string => !!p).map((p) => (
-              <button key={p} type="button" disabled={p.endsWith('.toml')} title={p.endsWith('.toml') ? p : `Read ${p}`} onClick={() => openDoc(t.workspaceId, { candidates: [p], label: 'file', kind: docKind(p) })} className="mb-1 flex w-full items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-left font-mono text-[11px] text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground">
-                <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span>{!p.endsWith('.toml') && <ArrowUpRight className="ml-auto size-3 shrink-0" />}
-              </button>
+              <FileLink key={p} workspaceId={t.workspaceId} path={p} className="mb-1 flex w-full items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-left font-mono text-[11px] text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground [&:is(a)]:hover:bg-accent [&:is(a)]:hover:text-foreground">
+                <FileText className="size-3.5 shrink-0" /><span className="truncate">{p}</span><ArrowUpRight className="ml-auto size-3 shrink-0" />
+              </FileLink>
             ))}
           </Section>
         </div>
@@ -176,18 +190,25 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
   );
 }
 
+function PlanBody({ ticket }: { ticket: Ticket }) {
+  const refs = useTicketRefs(ticket);
+  return <Markdown source={ticket.leaf.plan?.body ?? ''} refs={refs} />;
+}
+
 /** The sheet's title must be a SheetTitle for accessibility; the full page uses a plain heading. */
 function TicketTitle({ full, className, children }: { full?: boolean; className?: string; children: ReactNode }) {
   return full ? <h1 className={className}>{children}</h1> : <SheetTitle className={className}>{children}</SheetTitle>;
 }
 
 export function TicketHeader({ ticket: t, full }: { ticket: Ticket; full?: boolean }) {
-  const { select, setExpanded } = useBoardContext();
+  const { select, setExpanded, board } = useBoardContext();
+  const branch = board.workspaces.find((w) => w.store.id === t.workspaceId)?.store.links()?.branch;
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-border border-b px-4">
       {full && <Button size="sm" variant="ghost" onClick={() => setExpanded(false)}><ArrowLeft />Back</Button>}
       <span className="font-mono text-xs text-muted-foreground">{t.ref}</span>
-      <span className="min-w-0 truncate text-xs text-muted-foreground">· {t.workspace}{full ? ` · ${t.epic?.title ?? (t.leaf.folder === 'backlog' ? 'Backlog' : t.initiative?.title ?? '')}` : ''}</span>
+      <span className="min-w-0 truncate text-xs text-muted-foreground">· {t.workspace.split(' · ')[0]}{full ? ` · ${t.epic?.title ?? (t.leaf.folder === 'backlog' ? 'Backlog' : t.initiative?.title ?? '')}` : ''}</span>
+      {branch && <BranchLink workspaceId={t.workspaceId} branch={branch} className="max-w-48" />}
       <div className="ml-auto flex items-center gap-1">
         <Button size="icon-sm" variant="ghost" aria-label="Copy link" title="Copy link to this ticket" onClick={() => { void navigator.clipboard?.writeText(location.href); toast.success('Link copied'); }}><Link2 /></Button>
         <Button size="icon-sm" variant="ghost" aria-label="Copy BMAD ref" title="Copy BMAD ref" onClick={() => { void navigator.clipboard?.writeText(t.ref); toast.success(`Copied ${t.ref}`, { description: `Hand it to an agent, for example "build story ${t.ref}".` }); }}><Copy /></Button>

@@ -1,5 +1,5 @@
 /** Right-hand properties, as in Kaneo's task sheet: status, assignee, risk, needs-a-person, block. */
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileText } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { applyWithToast, setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
@@ -11,6 +11,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/c
 import { cn } from '@/lib/cn';
 import { STATUS_HELP, StateIcon } from '../board/chips';
 import { AssigneePicker } from './assignee-picker';
+import { CommitLink, FileLink } from '../common/links';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -18,6 +19,24 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <span className="w-28 shrink-0 text-xs text-muted-foreground">{label}</span>
       <div className="min-w-0 flex-1 text-sm">{children}</div>
     </div>
+  );
+}
+
+/** The ticket's epic or initiative: its title shows its tickets on the board; the icon opens its file. */
+function ContainerLink({ ticket, kind }: { ticket: Ticket; kind: 'epic' | 'initiative' }) {
+  const { select, setScope, setView, view } = useBoardContext();
+  const c = kind === 'epic' ? ticket.epic : ticket.initiative;
+  if (!c) return null;
+  const show = () => {
+    select(null);
+    setScope({ workspaceId: ticket.workspaceId, initiative: ticket.initiative?.slug, ...(kind === 'epic' ? { epic: c.slug } : {}) });
+    if (view === 'settings' || view === 'docs') setView('board');
+  };
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <button type="button" onClick={show} title={`Show the ${kind}'s tickets`} className="min-w-0 truncate text-left text-primary underline-offset-2 hover:underline">{c.title}</button>
+      {c.path && <FileLink workspaceId={ticket.workspaceId} path={c.path} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"><FileText className="size-3.5" aria-label={`Open the ${kind} file`} /></FileLink>}
+    </span>
   );
 }
 
@@ -74,9 +93,12 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
         )}
       </Row>
       <Row label="Type"><span title={TYPE_LABELS[leaf.type].help}>{TYPE_LABELS[leaf.type].label}</span>{leaf.file?.severity ? <span title={SEVERITY_LABELS[leaf.file.severity].help}> · {SEVERITY_LABELS[leaf.file.severity].label} ({leaf.file.severity})</span> : ''}</Row>
-      <Row label="Epic">{ticket.epic?.title ?? (leaf.folder === 'backlog' ? 'Backlog' : ticket.initiative?.title)}</Row>
+      <Row label="Epic">
+        {ticket.epic ? <ContainerLink ticket={ticket} kind="epic" /> : leaf.folder === 'backlog' ? 'Backlog' : 'None'}
+      </Row>
+      {ticket.initiative && <Row label="Initiative"><ContainerLink ticket={ticket} kind="initiative" /></Row>}
       {leaf.entry?.covers.length ? <Row label="Covers">{leaf.entry.covers.join(', ')}</Row> : null}
-      {leaf.plan?.baselineRevision && <Row label="Baseline"><code className="font-mono text-xs">{leaf.plan.baselineRevision}</code></Row>}
+      {leaf.plan?.baselineRevision && <Row label="Baseline">{/^[0-9a-f]{7,40}$/i.test(leaf.plan.baselineRevision) ? <CommitLink workspaceId={ticket.workspaceId} sha={leaf.plan.baselineRevision} className="text-xs" /> : <code className="font-mono text-xs">{leaf.plan.baselineRevision}</code>}</Row>}
       {leaf.tracker?.remote && <Row label="Tracker"><a className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline" href={leaf.tracker.remote} target="_blank" rel="noreferrer">{leaf.tracker.trackerId}<ExternalLink className="size-3" /></a></Row>}
 
       <div className="mt-4 border-border border-t pt-4">

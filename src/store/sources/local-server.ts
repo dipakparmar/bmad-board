@@ -1,6 +1,6 @@
 /** Talks to `server/index.ts`: reads files, writes them as one git commit, and streams change events. */
 import { membersFromGitLog, type ChangeAuthor, type ChangeResult, type Member, type StoreCapabilities } from '../../domain';
-import type { Activity, FileEntry, FileWrite } from '../file-source';
+import type { Activity, CommitDetail, FileEntry, FileWrite, RepoLinks } from '../file-source';
 import { cacheGet, cacheSet } from '../cache';
 import { readThroughCache, snapshotFromFiles, underPrefixes, type Snapshot, type SnapshotSource } from '../snapshot';
 
@@ -11,6 +11,17 @@ export interface ServerInfo {
   branch: string | null;
   /** `git config user.name` in the project, to prefill "your name". */
   user?: string | null;
+  /** The project's folder inside its repo, and the repo's `origin` URL. */
+  repoDir?: string;
+  remote?: string | null;
+}
+
+/** `git@github.com:o/r.git`, `https://github.com/o/r.git` and the like as a web URL, when it is one. */
+export function webOfRemote(remote: string | null | undefined): string | undefined {
+  if (!remote) return undefined;
+  const m = /^(?:git@|ssh:\/\/git@|https?:\/\/(?:[^@/]+@)?)([^/:]+)[:/](.+?)(?:\.git)?\/?$/.exec(remote.trim());
+  if (!m) return undefined;
+  return `https://${m[1]}/${m[2]}`;
 }
 
 export async function probeLocalServer(base = ''): Promise<ServerInfo | null> {
@@ -45,6 +56,18 @@ export class LocalServerSource implements SnapshotSource {
   }
 
   private snap: Promise<Snapshot | null> | null = null;
+
+  links(): RepoLinks {
+    return { web: webOfRemote(this.info.remote), branch: this.info.branch ?? undefined, dir: this.info.repoDir ?? '', localRoot: this.info.root };
+  }
+
+  async commitDetail(sha: string): Promise<CommitDetail> {
+    const res = await fetch(`${this.base}/api/show?sha=${encodeURIComponent(sha)}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `No commit ${sha}`);
+    const c = (await res.json()) as Omit<CommitDetail, 'paths'>;
+    const web = webOfRemote(this.info.remote);
+    return { ...c, paths: c.files.map((f) => f.path), url: web ? `${web}/commit/${c.sha}` : undefined };
+  }
 
   /**
    * Every BMAD file's version from one `/api/tree` call. Taken fresh at the start of each load; reads

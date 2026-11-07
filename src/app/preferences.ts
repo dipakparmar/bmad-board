@@ -3,6 +3,7 @@
  * live in the repo instead; see BoardConfig.
  */
 import { useCallback, useState } from 'react';
+import { DEFAULT_LINKS, type LinkPreferences } from './links';
 
 export type CardField = 'assignee' | 'readiness' | 'yourCall' | 'progress' | 'type' | 'risk' | 'hitl' | 'deps' | 'epic';
 
@@ -27,6 +28,8 @@ export interface Preferences {
   cardFields: Record<CardField, boolean>;
   showDoneColumn: boolean;
   standupRange: 'workday' | '24h' | '7d';
+  /** Where file, commit and branch links open. */
+  links: LinkPreferences;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -36,6 +39,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   cardFields: Object.fromEntries(CARD_FIELDS.map((f) => [f.id, true])) as Record<CardField, boolean>,
   showDoneColumn: true,
   standupRange: 'workday',
+  links: DEFAULT_LINKS,
 };
 
 const KEY = 'bmad-board:preferences';
@@ -43,7 +47,7 @@ const KEY = 'bmad-board:preferences';
 export function loadPreferences(): Preferences {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Preferences>;
-    return { ...DEFAULT_PREFERENCES, ...saved, cardFields: { ...DEFAULT_PREFERENCES.cardFields, ...saved.cardFields } };
+    return { ...DEFAULT_PREFERENCES, ...saved, cardFields: { ...DEFAULT_PREFERENCES.cardFields, ...saved.cardFields }, links: { ...DEFAULT_LINKS, ...saved.links } };
   } catch {
     return DEFAULT_PREFERENCES;
   }

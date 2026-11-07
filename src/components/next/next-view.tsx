@@ -139,7 +139,7 @@ export function NextView() {
         </div>
         <aside className="flex flex-col gap-3 rounded-xl border border-border p-4">
           <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recent activity{ws ? ` · ${ws.store.label}` : ''}</h3>
-          {activity === null ? <p className="text-xs text-muted-foreground">Loading…</p> : <ActivityList items={activity} empty={ws?.store.source.history ? 'No commits touch the tickets yet.' : 'History needs the local server or GitHub.'} />}
+          {activity === null ? <p className="text-xs text-muted-foreground">Loading…</p> : <ActivityList items={activity} workspaceId={ws?.store.id} empty={ws?.store.source.history ? 'No commits touch the tickets yet.' : 'History needs the local server or GitHub.'} />}
         </aside>
       </div>
     </div>

@@ -51,12 +51,37 @@ async function isRepo() {
 
 async function info() {
   const repo = await isRepo();
+  const top = repo ? (await git(['rev-parse', '--show-toplevel'])).out : null;
+  const remote = repo ? await git(['remote', 'get-url', 'origin']) : null;
   return {
     root,
     name: root.split(sep).pop(),
     git: repo,
     branch: repo ? (await git(['rev-parse', '--abbrev-ref', 'HEAD'])).out : null,
     user: repo ? (await git(['config', 'user.name'])).out || null : null,
+    // Where the project sits in its repo, and the repo's remote, so links can open on GitHub.
+    repoDir: top ? relative(top, root).split(sep).join('/') : '',
+    remote: remote?.ok ? remote.out : null,
+  };
+}
+
+/** One commit: who, when, why, and the files it changed. */
+async function show(sha: string) {
+  if (!/^[0-9a-f]{4,40}$/i.test(sha)) throw new HttpError(400, 'not a commit hash');
+  if (!(await isRepo())) throw new HttpError(404, 'not a git repository');
+  const r = await git(['show', '--no-color', '--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b%x1e', '--name-status', '--relative', sha]);
+  if (!r.ok) throw new HttpError(404, 'no such commit');
+  const [head = '', files = ''] = r.out.split('\x1e');
+  const [full = '', author = '', email = '', date = '', subject = '', body = ''] = head.split('\x1f');
+  const branches = await git(['branch', '--all', '--contains', full, '--format=%(refname:short)']);
+  return {
+    sha: full, author, email, date, subject, body: body.trim(),
+    changedBy: /^Changed-by:\s*(\S+)/m.exec(body)?.[1],
+    files: files.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+      const [status = '', ...paths] = l.split('\t');
+      return { status: status[0] ?? 'M', path: paths.at(-1) ?? '' };
+    }),
+    branches: branches.ok ? branches.out.split('\n').map((b) => b.trim()).filter(Boolean).slice(0, 20) : [],
   };
 }
 
@@ -367,6 +392,8 @@ const server = Bun.serve({
         }
         case 'GET /api/tree':
           return json(await tree());
+        case 'GET /api/show':
+          return json(await show(url.searchParams.get('sha') ?? ''));
         case 'GET /api/people':
           return json(await people());
         case 'GET /api/events':

@@ -62,6 +62,15 @@ export class FileTicketStore implements TicketStore {
     return this.source.history?.(path, limit) ?? Promise.resolve([]);
   }
 
+  commitDetail(sha: string) {
+    if (!this.source.commitDetail) return Promise.reject(new Error(`${this.label} has no commit history`));
+    return this.source.commitDetail(sha);
+  }
+
+  links() {
+    return this.source.links?.();
+  }
+
   people() {
     return this.source.people?.() ?? Promise.resolve([]);
   }

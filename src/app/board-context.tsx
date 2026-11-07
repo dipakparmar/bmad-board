@@ -22,9 +22,15 @@ export interface OpenDoc {
   back?: { view: View; ticketUid: string | null };
 }
 
-function readHash(): { ref?: string; ws?: string; init?: string; full: boolean; doc?: string } {
+function readHash(): { ref?: string; ws?: string; init?: string; full: boolean; doc?: string; commit?: string } {
   const p = new URLSearchParams(location.hash.slice(1));
-  return { ref: p.get('ticket') ?? undefined, ws: p.get('ws') ?? undefined, init: p.get('init') ?? undefined, full: p.get('full') === '1', doc: p.get('doc') ?? undefined };
+  return { ref: p.get('ticket') ?? undefined, ws: p.get('ws') ?? undefined, init: p.get('init') ?? undefined, full: p.get('full') === '1', doc: p.get('doc') ?? undefined, commit: p.get('commit') ?? undefined };
+}
+
+/** A commit open in the commit view. */
+export interface OpenCommit {
+  workspaceId: string;
+  sha: string;
 }
 
 const FILTERS_KEY = 'bmad-board:filters';
@@ -61,6 +67,7 @@ function useBoardState() {
   };
   const [view, setView] = useState<View>(() => (readHash().doc ? 'docs' : loadPreferences().defaultView));
   const [doc, setDoc] = useState<OpenDoc | null>(null);
+  const [commit, setCommit] = useState<OpenCommit | null>(null);
   const [search, setSearch] = useState('');
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'github' | 'new-ticket' | 'search' | null>(null);
@@ -112,8 +119,16 @@ function useBoardState() {
     if (ws) setDoc({ workspaceId: ws.store.id, link: { candidates: [pendingDoc.doc], label: 'document', kind: 'doc' } });
     setPendingDoc({ full: false });
   }, [board.workspaces, pendingDoc]);
+  // #commit=<sha> opens the commit view once a project with history has loaded.
+  const [pendingCommit, setPendingCommit] = useState(() => readHash().commit);
   useEffect(() => {
-    if (pendingRef.ref || pendingDoc.doc) return;
+    if (!pendingCommit || board.workspaces.length === 0) return;
+    const ws = board.workspaces.find((w) => w.store.label === readHash().ws) ?? board.workspaces.find((w) => w.store.source.commitDetail) ?? board.workspaces[0];
+    if (ws) setCommit({ workspaceId: ws.store.id, sha: pendingCommit });
+    setPendingCommit(undefined);
+  }, [board.workspaces, pendingCommit]);
+  useEffect(() => {
+    if (pendingRef.ref || pendingDoc.doc || pendingCommit) return;
     if (view === 'docs' && doc && !selected) {
       const ws = board.workspaces.length > 1 ? `&ws=${encodeURIComponent(board.workspaces.find((w) => w.store.id === doc.workspaceId)?.store.label ?? '')}` : '';
       const hash = `#doc=${encodeURIComponent(doc.link.candidates[0] ?? '')}${ws}`;
@@ -128,10 +143,14 @@ function useBoardState() {
       if (selected.initiative && tickets.some((t) => t.ref === selected.ref && t.uid !== selected.uid)) p.set('init', selected.initiative.slug);
       if (expanded) p.set('full', '1');
     }
+    if (commit) {
+      p.set('commit', commit.sha);
+      if (board.workspaces.length > 1 && !p.has('ws')) p.set('ws', board.workspaces.find((w) => w.store.id === commit.workspaceId)?.store.label ?? '');
+    }
     filtersToParams(filters, p);
     const hash = p.size ? `#${p.toString().replaceAll('%2C', ',').replaceAll('%2F', '/')}` : '';
     if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
-  }, [selected, expanded, pendingRef, pendingDoc, board.workspaces, view, doc, filters, tickets]);
+  }, [selected, expanded, pendingRef, pendingDoc, pendingCommit, board.workspaces, view, doc, filters, tickets, commit]);
 
   /** Opens a doc in the reader, remembering the view and ticket to come back to. */
   const openDoc = (workspaceId: string, link: DocLink) => {
@@ -154,7 +173,7 @@ function useBoardState() {
     if (!uid) setExpanded(false);
   };
 
-  return { board, doc, setDoc, openDoc, closeDoc, preferences, mineOnly, setMineOnly, filters, setFilters, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
+  return { board, doc, setDoc, openDoc, commit, openCommit: (workspaceId: string, sha: string) => setCommit({ workspaceId, sha }), closeCommit: () => setCommit(null), closeDoc, preferences, mineOnly, setMineOnly, filters, setFilters, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
 }
 
 export type BoardState = ReturnType<typeof useBoardState>;

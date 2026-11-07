@@ -4,7 +4,7 @@
  */
 import type { ChangeAuthor, ChangeResult, Member, StoreCapabilities } from '../../domain';
 import { cacheGet, cacheSet } from '../cache';
-import { changedByOf, joinPath, type Activity, type FileEntry, type FileSource, type FileWrite } from '../file-source';
+import { changedByOf, joinPath, type Activity, type CommitDetail, type FileEntry, type FileSource, type FileWrite, type RepoLinks } from '../file-source';
 import { readThroughCache, snapshotFromFiles, type Snapshot } from '../snapshot';
 
 export interface GitHubTarget {
@@ -167,6 +167,20 @@ export class GitHubSource implements FileSource {
       this.pullRequestUrl = pr.html_url;
     }
     return { paths: files.map((f) => f.path), commit: commit.sha, pullRequestUrl: this.pullRequestUrl };
+  }
+
+  links(): RepoLinks {
+    return { web: `https://github.com/${this.target.owner}/${this.target.repo}`, branch: this.ref || this.target.branch, dir: this.target.dir ? joinPath(this.target.dir) : '' };
+  }
+
+  async commitDetail(sha: string): Promise<CommitDetail> {
+    type C = { sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } }; files?: { filename: string; status: string }[] };
+    const c = await this.call<C>(this.repoPath(`/commits/${encodeURIComponent(sha)}`));
+    const prefix = this.target.dir ? `${joinPath(this.target.dir)}/` : '';
+    const [subject = '', ...rest] = c.commit.message.split('\n');
+    const status: Record<string, string> = { added: 'A', removed: 'D', modified: 'M', renamed: 'R', copied: 'C', changed: 'M' };
+    const files = (c.files ?? []).filter((f) => f.filename.startsWith(prefix)).map((f) => ({ status: status[f.status] ?? 'M', path: f.filename.slice(prefix.length) }));
+    return { sha: c.sha, author: c.commit.author.name, date: c.commit.author.date, subject, body: rest.join('\n').trim(), changedBy: changedByOf(rest.join('\n')), files, paths: files.map((f) => f.path), url: c.html_url };
   }
 
   async history(path: string, limit = 30): Promise<Activity[]> {

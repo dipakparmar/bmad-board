@@ -7,11 +7,13 @@ import { bodyOf, type Ticket } from '@/app/view-model';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Markdown } from './markdown';
+import { useTicketRefs } from '../common/links';
 
 export function TaskDescription({ ticket }: { ticket: Ticket }) {
   const state = useBoardContext();
   const { leaf } = ticket;
   const [draft, setDraft] = useState<string | null>(null);
+  const refs = useTicketRefs(ticket);
   const editingFile = !!leaf.file;
   const source = editingFile ? leaf.file?.body ?? '' : leaf.entry?.description ?? '';
 
@@ -42,7 +44,7 @@ export function TaskDescription({ ticket }: { ticket: Ticket }) {
   const shown = bodyOf(leaf);
   return (
     <div className="group relative">
-      {shown ? <Markdown source={shown} /> : <p className="text-sm text-muted-foreground">No description yet.</p>}
+      {shown ? <Markdown source={shown} refs={refs} /> : <p className="text-sm text-muted-foreground">No description yet.</p>}
       {!ticket.readOnly && (
         <Button size="xs" variant="ghost" className="absolute -top-1 right-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" onClick={() => setDraft(source)}>
           <Pencil />Edit

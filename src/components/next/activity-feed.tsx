@@ -3,6 +3,7 @@ import { Bot, GitCommit, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useBoardContext } from '@/app/board-context';
 import type { Activity } from '@/store';
+import { CommitLink } from '../common/links';
 
 function ago(iso: string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -20,7 +21,7 @@ export function actorOf(a: Activity): { name: string; agent: boolean } {
   return { name: a.author, agent: /agent|claude|bot|\[bot\]/i.test(a.author) };
 }
 
-export function ActivityList({ items, empty = 'No commits yet.' }: { items: Activity[]; empty?: string }) {
+export function ActivityList({ items, workspaceId, empty = 'No commits yet.' }: { items: Activity[]; workspaceId?: string; empty?: string }) {
   if (items.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
   return (
     <ol className="flex flex-col gap-3">
@@ -31,9 +32,9 @@ export function ActivityList({ items, empty = 'No commits yet.' }: { items: Acti
           <li key={a.sha} className="flex gap-2.5 text-xs">
             <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
-              <div className="truncate text-foreground/90">{a.subject}</div>
+              {workspaceId ? <CommitLink workspaceId={workspaceId} sha={a.sha} className="block w-full truncate text-left text-foreground/90">{a.subject}</CommitLink> : <div className="truncate text-foreground/90">{a.subject}</div>}
               <div className="text-muted-foreground">
-                {actor.name} · {ago(a.date)} · {a.url ? <a className="font-mono hover:underline" href={a.url} target="_blank" rel="noreferrer">{a.sha.slice(0, 7)}</a> : <span className="font-mono">{a.sha.slice(0, 7)}</span>}
+                {actor.name} · {ago(a.date)} · {workspaceId ? <CommitLink workspaceId={workspaceId} sha={a.sha} /> : a.url ? <a className="font-mono hover:underline" href={a.url} target="_blank" rel="noreferrer">{a.sha.slice(0, 7)}</a> : <span className="font-mono">{a.sha.slice(0, 7)}</span>}
               </div>
             </div>
           </li>
