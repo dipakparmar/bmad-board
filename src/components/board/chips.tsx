@@ -1,7 +1,10 @@
 /** Small pieces shared by cards, rows and the ticket sheet. Chip styling follows Kaneo's task chips. */
-import { Ban, Bug, CheckCircle2, Circle, CircleDashed, CircleDot, FlaskConical, Hand, Sparkles, Timer, UserRound } from 'lucide-react';
+import { Ban, CheckCircle2, Circle, CircleDashed, CircleDot, Hand, Sparkles, Timer, UserRound } from 'lucide-react';
 import { HITL_LABEL, RISK_LABELS, SEVERITY_LABELS, STATUS_LABELS, TYPE_LABELS, type BoardState, type Leaf, type LeafStatus } from '@/domain';
 import type { Readiness } from '@/app/view-model';
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
+import { MemberAvatar } from '@/components/common/member-avatar';
+import { useBoardContext } from '@/app/board-context';
 import { cn } from '@/lib/cn';
 
 export const taskChipClass =
@@ -47,9 +50,8 @@ export function ReadinessChip({ readiness, title }: { readiness: Readiness; titl
 
 export function TypeChip({ leaf }: { leaf: Leaf }) {
   if (leaf.type === 'story') return null;
-  const Icon = leaf.type === 'bug' ? Bug : FlaskConical;
   const sev = leaf.file?.severity;
-  return <span className={taskChipClass} title={[TYPE_LABELS[leaf.type].help, sev && SEVERITY_LABELS[sev].help].filter(Boolean).join(' ')}><Icon />{TYPE_LABELS[leaf.type].label}{sev ? ` · ${SEVERITY_LABELS[sev].label}` : ''}</span>;
+  return <span className={taskChipClass} title={[TYPE_LABELS[leaf.type].help, sev && SEVERITY_LABELS[sev].help].filter(Boolean).join(' ')}><TicketTypeIcon type={leaf.type} />{TYPE_LABELS[leaf.type].label}{sev ? ` · ${SEVERITY_LABELS[sev].label}` : ''}</span>;
 }
 
 export function RiskChip({ leaf }: { leaf: Leaf }) {
@@ -62,12 +64,12 @@ export function HitlChip({ leaf }: { leaf: Leaf }) {
   return <span className={taskChipClass} title={HITL_LABEL.help}><Hand />{HITL_LABEL.label}</span>;
 }
 
-export function Assignee({ name, className }: { name?: string; className?: string }) {
+export function Assignee({ name, className, workspaceId }: { name?: string; className?: string; workspaceId?: string }) {
+  const { people, scope, resolvePerson } = useBoardContext();
+  const id = workspaceId ?? scope.workspaceId;
+  const candidates = id ? people[id] ?? [] : Object.values(people).flat();
+  const member = name && id ? resolvePerson(id, name) : candidates.find((m) => m.name === name);
   if (!name) return <UserRound className={cn('size-4 text-muted-foreground/60', className)} aria-label="Unassigned" />;
-  const agent = /agent|claude|bot/i.test(name);
-  return (
-    <span title={name} className={cn('grid size-5 shrink-0 place-items-center rounded-full text-[9px] font-semibold', agent ? 'bg-info/15 text-info' : 'bg-primary/12 text-primary', className)}>
-      {name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()}
-    </span>
-  );
+  const agent = member?.agent ?? /agent|claude|codex|copilot|bot/i.test(name);
+  return <MemberAvatar name={member?.name ?? name} avatarUrl={member?.avatarUrl} agent={agent} initialsForDefaults className={className} />;
 }

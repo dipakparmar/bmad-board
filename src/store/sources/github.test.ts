@@ -28,6 +28,9 @@ function fakeGitHub(files: Map<string, string>) {
       const p = url.pathname.replace('/repos/o/r', '');
       const body = req.method === 'GET' ? null : await req.json() as Record<string, unknown>;
       if (p === '') return Response.json({ default_branch: 'main' });
+      if (p === '/contributors') return Response.json([{ login: 'demo-agent[bot]', avatar_url: '', type: 'Bot', contributions: 20 }]);
+      if (p === '/collaborators') return Response.json([]);
+      if (p === '/commits') return Response.json([{ commit: { author: { name: 'demo-agent[bot]', email: 'bot@test', date: '2026-11-07' }, message: 'AI work\n\nCo-authored-by: Human Contributor <human@test>' } }]);
       let m = /^\/git\/trees\/(.+)$/.exec(p);
       if (m && req.method === 'GET') {
         const ref = decodeURIComponent(m[1] ?? '');
@@ -77,6 +80,13 @@ describe('GitHubSource', () => {
     const store = new FileTicketStore(new GitHubSource({ owner: 'o', repo: 'r' }, repo.url));
     expect(store.capabilities.write).toBe(false);
     expect(allLeaves(await store.load())).toHaveLength(7);
+  });
+
+  test('discovers human co-authors alongside GitHub bot contributors', async () => {
+    const source = new GitHubSource({ owner: 'o', repo: 'r' }, repo.url);
+    const members = await source.people();
+    expect(members).toContainEqual(expect.objectContaining({ name: 'Human Contributor', email: 'human@test', agent: false }));
+    expect(members).toContainEqual(expect.objectContaining({ name: 'demo-agent[bot]', login: 'demo-agent[bot]', agent: true, commits: 20 }));
   });
 
   test('changes land on one session branch with one pull request', async () => {

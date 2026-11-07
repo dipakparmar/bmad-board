@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { allLeaves } from '../src/store/load-tree';
@@ -78,6 +78,20 @@ describe('local server', () => {
     expect(info?.user).toBe('Board Test');
     const people = await new LocalServerSource(info!, base).people();
     expect(people.map((p) => [p.name, p.commits])).toEqual([['Dipak', 1], ['t', 1]]);
+  });
+
+  test('discovers human co-authors on bot commits and keeps full board actor names', async () => {
+    writeFileSync(join(dir, 'coauthor.md'), 'Human and bot contribution\n');
+    sh('git', 'add', 'coauthor.md');
+    sh('git', '-c', 'user.name=demo-agent[bot]', '-c', 'user.email=bot@test', 'commit', '--allow-empty', '-qm', 'bot work\n\nCo-authored-by: Human Contributor <human@test>');
+    const info = await probeLocalServer(base);
+    const source = new LocalServerSource(info!, base);
+    expect(await source.people()).toContainEqual(expect.objectContaining({ name: 'Human Contributor', email: 'human@test', agent: false, commits: 1 }));
+    expect((await source.history('.', 1))[0]?.coAuthors).toEqual(['Human Contributor']);
+    writeFileSync(join(dir, 'coauthor.md'), 'Board follow-up\n');
+    sh('git', 'add', 'coauthor.md');
+    sh('git', 'commit', '--allow-empty', '-qm', 'board work\n\nChanged-by: person:Human Contributor via bmad-board');
+    expect((await source.history('.', 1))[0]?.changedBy).toBe('person:Human Contributor');
   });
 
   test('lends the gh CLI login to GitHub calls without exposing the token', async () => {

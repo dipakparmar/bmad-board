@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { BrowserFolderSource, LocalServerSource } from '@/store';
+import { ticketTypeColor } from '@/components/common/ticket-type-icon';
 import { cn } from '@/lib/cn';
 
 function sourceIcon(w: Workspace) {
@@ -24,7 +25,7 @@ function NavItem({ active, onClick, icon: Icon, label, count, indent = 0 }: { ac
       style={{ paddingLeft: `${0.5 + indent * 0.75}rem` }}
       className={cn('flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left text-[13px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground', active && 'bg-sidebar-accent font-medium text-sidebar-accent-foreground')}
     >
-      <Icon className="size-3.5 shrink-0 opacity-70" />
+      <Icon className={cn("size-3.5 shrink-0", Icon === Layers ? ticketTypeColor('epic') : Icon === Target ? ticketTypeColor('initiative') : 'opacity-70')} />
       <span className="truncate">{label}</span>
       {count && <span className="ml-auto text-[11px] tabular-nums text-sidebar-foreground/50">{count}</span>}
     </button>

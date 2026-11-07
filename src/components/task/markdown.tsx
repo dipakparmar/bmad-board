@@ -2,7 +2,9 @@ import { Children, isValidElement, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { headingSlug } from '@/domain';
+import { DocumentReferenceLabel, ReferenceChipLabel, referenceChipClass } from '../common/reference-chip';
+import type { DocLink, TicketType } from '@/domain';
+import { docKind, normalisePath, headingSlug } from '@/domain';
 import { linkifyRefs, type RefResolver } from '@/app/links';
 import { cn } from '@/lib/cn';
 
@@ -22,7 +24,7 @@ function textOf(node: ReactNode): string {
  * that open the ticket or commit in the board.
  */
 /** With `onTask`, task-list checkboxes can be ticked; it gets the checkbox's index in the source, from 0. */
-export function Markdown({ source, className, onDocLink, refs, onTask }: { source: string; className?: string; onDocLink?: (href: string) => void; refs?: { resolver: RefResolver; onRef: (kind: string, value: string) => void }; onTask?: (index: number, checked: boolean) => void }) {
+export function Markdown({ source, className, onDocLink, refs, onTask, workspaceId, basePath }: { source: string; className?: string; onDocLink?: (href: string) => void; refs?: { resolver: RefResolver; onRef: (kind: string, value: string) => void; describeRef?: (kind: string, value: string) => { title: string; ref?: string; type: TicketType } | undefined; docLink?: (href: string) => DocLink; workspaceId?: string; onDocLink?: (href: string) => void }; workspaceId?: string; basePath?: string; onTask?: (index: number, checked: boolean) => void }) {
   const seen = new Map<string, number>();
   // Checkboxes render in source order, so a running count is each one's index.
   let task = 0;
@@ -35,9 +37,18 @@ export function Markdown({ source, className, onDocLink, refs, onTask }: { sourc
   const components: Components = {
     a: ({ node: _n, href, ...props }) => {
       const ref = refs && href ? /^#(ticket|name|commit)=(.+)$/.exec(href) : null;
-      if (ref && refs) return <a {...props} href={href} className="ticket-ref" onClick={(e) => { e.preventDefault(); refs.onRef(ref[1] ?? '', decodeURIComponent(ref[2] ?? '')); }} />;
-      const local = !!onDocLink && !!href && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('#');
-      if (local) return <a {...props} href={`#doc`} onClick={(e) => { e.preventDefault(); onDocLink(href); }} />;
+      if (ref && refs) {
+        const kind = ref[1] ?? ''; const value = decodeURIComponent(ref[2] ?? '');
+        const info = refs.describeRef?.(kind, value);
+        return <a {...props} href={href} className={info ? referenceChipClass : 'ticket-ref'} title={info ? `${info.ref ? `${info.ref}: ` : ''}${info.title}` : undefined} onClick={(e) => { e.preventDefault(); refs.onRef(kind, value); }}>{info ? <ReferenceChipLabel {...info} /> : props.children}</a>;
+      }
+      const handleDoc = onDocLink ?? refs?.onDocLink;
+      const local = !!handleDoc && !!href && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('#') && !href.startsWith('//');
+      if (local) {
+        const [path = '', anchor] = href.split('#');
+        const link = refs?.docLink?.(href) ?? { candidates: [...new Set([normalisePath(`${basePath?.slice(0, basePath.lastIndexOf('/')) ?? ''}/${path}`), normalisePath(path)])], anchor, label: 'document', kind: docKind(path) };
+        return <a {...props} href="#doc" className={referenceChipClass} title={href} onClick={(e) => { e.preventDefault(); handleDoc(href); }}><DocumentReferenceLabel workspaceId={workspaceId ?? refs?.workspaceId} link={link} /></a>;
+      }
       if (href?.startsWith('#')) return <a {...props} href={href} onClick={(e) => { e.preventDefault(); document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth' }); }} />;
       return <a {...props} href={href} target="_blank" rel="noreferrer" />;
     },

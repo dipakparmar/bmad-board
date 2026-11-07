@@ -1,3 +1,4 @@
+import type { SprintDefinition } from './sprints';
 import type { DocLink } from './docs';
 import type { BoardConfig } from './board-config';
 /**
@@ -91,6 +92,9 @@ export interface TrackerLink {
 
 /** A buildable unit: entry + optional leaf file + optional plan, joined. */
 export interface Leaf {
+  sprint?: string;
+  /** Owner declared in ticket metadata, independent of a build-plan assignee. */
+  owner?: string;
   key: TicketKey;
   id: number | string | null;
   type: LeafType;
@@ -158,6 +162,7 @@ export interface LeafLinks {
 
 /** Initiative or epic: a spec at its level, with requirements its children are cut from. */
 export interface Container {
+  owner?: string;
   type: ContainerType;
   slug: string;
   id?: number | string;
@@ -218,6 +223,7 @@ export type TrackerKind = 'repo' | 'github' | 'jira' | 'linear' | 'notion' | 'tr
 
 /** Everything the board needs for one project root. */
 export interface TicketTree {
+  sprints?: SprintDefinition[];
   /** Where `_bmad/` lives. */
   projectRoot: string;
   outputFolder: string;

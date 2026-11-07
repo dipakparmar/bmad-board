@@ -1,3 +1,5 @@
+import { createPersonResolver, resolveMembers } from './identities';
+import { membersFromGitLog, mergeMembers } from './people';
 import { describe, expect, test } from 'bun:test';
 import { lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesPath, type StandupCommit } from './standup';
 import type { Leaf } from './ticket-tree';
@@ -74,4 +76,38 @@ describe('stand-up', () => {
     expect(parseStandupNotes(md, s.members)).toEqual(notes);
     expect(standupNotesPath('_bmad-output/', new Date(2026, 10, 9))).toBe('_bmad-output/standups/standup-2026-11-09.md');
   });
+});
+
+
+test('stand-up joins raw ticket assignees and commit aliases using the same canonical roster as Settings', () => {
+  const members = mergeMembers(membersFromGitLog([
+    { name: 'Dipak Parmar', email: 'person@test', date: '2026-11-07' },
+    { name: 'dipakparmar', email: 'person@test', date: '2026-11-06' },
+  ]));
+  const roster = resolveMembers(members, []);
+  const resolve = createPersonResolver(roster, []);
+  const tickets = [ticket(1, 'in-progress', 'Dipak Parmar'), ticket(2, 'ready-for-dev', 'dipakparmar'), ticket(3, 'done', 'person@test')];
+  const commits = [commit('same', 'person@test', '2026-11-07', ['epic-a/story-3-plan.md']), commit('same', 'dipakparmar', '2026-11-07', ['epic-a/story-3-plan.md'])];
+  const report = standup(tickets, commits, new Date(0), undefined, resolve);
+  expect(report.members).toHaveLength(1);
+  expect(report.members[0]?.name).toBe(roster[0]?.name);
+  expect(report.members[0]?.doing).toHaveLength(1);
+  expect(report.members[0]?.upNext).toHaveLength(1);
+  expect(report.members[0]?.finished).toHaveLength(1);
+  expect(report.members[0]?.commits).toHaveLength(1);
+});
+
+test('stand-up preserves separate bots and humans after applying accepted first-name mappings', () => {
+  const rules = [{ id: 'person-dipak', name: 'Dipak', aliases: ['Dipak Parmar', 'dipakparmar', 'person@test'], agent: false, hidden: false }];
+  const resolve = createPersonResolver(resolveMembers(membersFromGitLog([{ name: 'Dipak Parmar', email: 'person@test', date: '2026-11-07' }]), rules), rules);
+  const report = standup([ticket(1, 'in-progress', 'dipakparmar'), ticket(2, 'in-progress', 'dev-agent')], [commit('a', 'Dipak Parmar', '2026-11-07'), commit('b', 'Dipak', '2026-11-07')], new Date(0), undefined, resolve);
+  expect(report.members).toHaveLength(2);
+  expect(report.members.find((m) => m.id === 'person-dipak')?.commits).toHaveLength(2);
+  expect(report.members.find((m) => m.name === 'dev-agent')?.agent).toBe(true);
+});
+
+test('canonical roster resolution preserves project-hidden users without a browser override', () => {
+  const resolve = createPersonResolver(resolveMembers(membersFromGitLog([{ name: 'CI User', email: 'ci@test', date: '2026-11-07' }]), []), []);
+  const report = standup([], [commit('ci', 'CI User', '2026-11-07')], new Date(0), { wipLimits: {}, agents: [], hidden: ['CI User'] }, resolve);
+  expect(report.members).toHaveLength(0);
 });

@@ -16,7 +16,7 @@ export interface BoardConfig {
 
 export const DEFAULT_BOARD_CONFIG: BoardConfig = { wipLimits: {}, agents: [], hidden: [] };
 
-const AGENT = /agent|claude|bot|\[bot\]/i;
+const AGENT = /agent|claude|codex|copilot|bot|\[bot\]/i;
 
 /** Whether a name belongs to an agent: named in the config, or shaped like one. */
 export function isAgent(name: string, config: BoardConfig = DEFAULT_BOARD_CONFIG): boolean {

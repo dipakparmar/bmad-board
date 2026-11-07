@@ -1,6 +1,7 @@
 /** Talks to `server/index.ts`: reads files, writes them as one git commit, and streams change events. */
-import { membersFromGitLog, type ChangeAuthor, type ChangeResult, type Member, type StoreCapabilities } from '../../domain';
+import { mergeMembers, membersFromGitLog, type ChangeAuthor, type ChangeResult, type Member, type StoreCapabilities } from '../../domain';
 import type { Activity, CommitDetail, FileEntry, FileWrite, RepoLinks } from '../file-source';
+import { avatarLookupCommits, membersFromGitHubAccounts, type GitHubPeopleCommit, type LocalPeopleLine } from './github-people';
 import { cacheGet, cacheSet } from '../cache';
 import { readThroughCache, snapshotFromFiles, underPrefixes, type Snapshot, type SnapshotSource } from '../snapshot';
 
@@ -162,8 +163,35 @@ export class LocalServerSource implements SnapshotSource {
   async people(): Promise<Member[]> {
     const res = await fetch(`${this.base}/api/people`, { cache: 'no-store' });
     if (!res.ok) return [];
-    const { lines } = (await res.json()) as { lines: Parameters<typeof membersFromGitLog>[0] };
-    return membersFromGitLog(lines);
+    const { lines } = (await res.json()) as { lines: (Parameters<typeof membersFromGitLog>[0][number] & LocalPeopleLine)[] };
+    const members = membersFromGitLog(lines);
+    const repo = /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(webOfRemote(this.info.remote) ?? '');
+    if (!repo) return members;
+    const shas = avatarLookupCommits(members, lines);
+    const accounts: Member[] = [];
+    let unavailable = false;
+    const lookup = async (sha: string) => {
+      const key = `bmad-board:github-commit-people:v1:${repo[1]}/${repo[2]}:${sha}`;
+      try {
+        const cached = JSON.parse(localStorage.getItem(key) ?? 'null') as { at: number; members: Member[] } | null;
+        if (cached && Date.now() - cached.at < 6 * 3600_000) { accounts.push(...cached.members); return; }
+      } catch { /* browser storage can be unavailable */ }
+      if (unavailable) return;
+      try {
+        const response = await fetch(`${this.base}/api/gh/repos/${encodeURIComponent(repo[1]!)}/${encodeURIComponent(repo[2]!)}/commits/${encodeURIComponent(sha)}`, { headers: { 'x-bmad-board': '1' }, signal: AbortSignal.timeout(5000) });
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) unavailable = true;
+          return;
+        }
+        const discovered = membersFromGitHubAccounts([await response.json() as GitHubPeopleCommit]);
+        accounts.push(...discovered);
+        try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), members: discovered })); } catch { /* optional cache */ }
+      } catch { /* network and GitHub access are optional; retain the local roster */ }
+    };
+    // Check access first, then use small batches. An unavailable gh login costs one request.
+    if (shas[0]) await lookup(shas[0]);
+    for (let i = 1; i < shas.length && !unavailable; i += 4) await Promise.all(shas.slice(i, i + 4).map(lookup));
+    return mergeMembers(members, accounts);
   }
 
   async history(path: string, limit = 30): Promise<Activity[]> {

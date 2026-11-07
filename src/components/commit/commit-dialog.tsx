@@ -5,7 +5,7 @@ import { useBoardContext } from '@/app/board-context';
 import { ticketsTouched } from '@/app/touched';
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from '@/components/ui/dialog';
 import type { CommitDetail } from '@/store';
-import { StateIcon } from '../board/chips';
+import { Assignee, StateIcon } from '../board/chips';
 import { actorOf } from '../next/activity-feed';
 import { BranchLink, FileLink } from '../common/links';
 import { usePaged } from '../common/show-more';
@@ -13,7 +13,7 @@ import { usePaged } from '../common/show-more';
 const STATUS: Record<string, string> = { A: 'added', D: 'deleted', M: 'changed', R: 'renamed', C: 'copied', T: 'changed' };
 
 export function CommitDialog() {
-  const { commit, closeCommit, board, tickets, select, setScope, setView } = useBoardContext();
+  const { commit, closeCommit, board, tickets, select, setScope, setView, resolvePerson } = useBoardContext();
   const store = board.workspaces.find((w) => w.store.id === commit?.workspaceId)?.store;
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,8 @@ export function CommitDialog() {
     };
   }, [commit, store]);
   const touched = useMemo(() => (detail ? ticketsTouched(detail.paths, tickets.filter((t) => t.workspaceId === commit?.workspaceId)) : null), [detail, tickets, commit]);
-  const actor = detail ? actorOf(detail) : null;
+  const rawActor = detail ? actorOf(detail) : null;
+  const actor = rawActor && commit ? resolvePerson(commit.workspaceId, rawActor.name) ?? rawActor : rawActor;
   const { visible, more } = usePaged(touched?.tickets ?? [], 25);
 
   return (
@@ -38,7 +39,7 @@ export function CommitDialog() {
           <DialogTitle className="pr-6 text-base leading-6">{detail?.subject ?? (error ? 'Commit not found' : 'Loading commit…')}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-mono">{commit?.sha.slice(0, 10)}</span>
-            {detail && actor && <span>· {actor.name}{actor.agent ? ' (agent)' : ''} · {new Date(detail.date).toLocaleString()}</span>}
+            {detail && actor && <span className="inline-flex items-center gap-1.5">· <Assignee workspaceId={commit?.workspaceId} name={actor.name} />{actor.name}{actor.agent ? ' (agent)' : ''} · {new Date(detail.date).toLocaleString()}</span>}
             {detail?.url && <a href={detail.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">· GitHub<ExternalLink className="size-3" /></a>}
           </DialogDescription>
         </DialogHeader>

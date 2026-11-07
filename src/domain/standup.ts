@@ -4,6 +4,7 @@
  * "Finished" comes from git: commits by that member since the cut-off, and the tickets those commits touched.
  */
 import { isAgent, isHidden, type BoardConfig } from './board-config';
+import type { ResolvedPerson } from './identities';
 import type { Leaf } from './ticket-tree';
 
 /** A commit as the stand-up sees it. The store's Activity fits this shape. */
@@ -20,7 +21,7 @@ export interface StandupCommit {
 }
 
 export interface StandupMember<T> {
-  /** Lower-cased name, used to match assignees to commit authors. */
+  /** Canonical person id when a roster resolver is available; otherwise a lower-cased name. */
   id: string;
   name: string;
   agent: boolean;
@@ -45,7 +46,7 @@ export interface Standup<T> {
   unowned: T[];
 }
 
-const AGENT = /agent|claude|bot|\[bot\]/i;
+const AGENT = /agent|claude|codex|copilot|bot|\[bot\]/i;
 
 export function isAgentName(name: string): boolean {
   return AGENT.test(name);
@@ -67,13 +68,14 @@ export function lastWorkingDay(now: Date): Date {
   return d;
 }
 
-export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T[], commits: StandupCommit[], since: Date, config?: BoardConfig): Standup<T> {
+export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T[], commits: StandupCommit[], since: Date, config?: BoardConfig, resolve?: (name: string) => ResolvedPerson | undefined): Standup<T> {
   const members = new Map<string, StandupMember<T>>();
   const member = (name: string, agent = isAgent(name, config)) => {
-    const id = memberId(name);
+    const person = resolve?.(name);
+    const id = person?.id ?? memberId(name);
     let m = members.get(id);
     if (!m) {
-      m = { id, name: name.trim(), agent, finished: [], commits: [], doing: [], review: [], blocked: [], upNext: [] };
+      m = { id, name: person?.name ?? name.trim(), agent: person?.agent ?? agent, finished: [], commits: [], doing: [], review: [], blocked: [], upNext: [] };
       members.set(id, m);
     }
     return m;
@@ -110,7 +112,7 @@ export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T
   for (const c of [...commits].sort((a, b) => b.date.localeCompare(a.date))) {
     if (new Date(c.date).getTime() < cutoff) continue;
     const m = member(c.actor, c.agent);
-    m.commits.push(c);
+    if (!m.commits.some((existing) => existing.sha === c.sha)) m.commits.push({ ...c, actor: m.name, agent: m.agent });
     for (const p of c.paths) {
       const t = byPath.get(p);
       if (!t || m.finished.includes(t)) continue;
@@ -123,7 +125,7 @@ export function standup<T extends { leaf: Leaf; readiness?: string }>(tickets: T
   for (const m of members.values()) m.review = m.review.filter((t) => !m.finished.includes(t));
 
   // Hidden people (CI users, ex-teammates) drop out unless they still hold tickets.
-  const shown = [...members.values()].filter((m) => !isHidden(m.name, config) || m.doing.length + m.review.length + m.blocked.length + m.upNext.length > 0);
+  const shown = [...members.values()].filter((m) => !(resolve?.(m.name)?.hidden ?? isHidden(m.name, config)) || m.doing.length + m.review.length + m.blocked.length + m.upNext.length > 0);
   const ordered = shown.sort((a, b) => Number(a.agent) - Number(b.agent) || a.name.localeCompare(b.name));
   return { since, members: ordered, upForGrabs, unowned };
 }

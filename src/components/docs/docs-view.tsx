@@ -152,7 +152,7 @@ export function DocReader({ workspaceId, link }: { workspaceId: string; link: Do
                   </dl>
                 </details>
               )}
-              <Markdown source={parsed.body} onDocLink={openRelative} />
+              <Markdown source={parsed.body} onDocLink={openRelative} workspaceId={workspaceId} basePath={path} />
             </div>
           )}
         </div>

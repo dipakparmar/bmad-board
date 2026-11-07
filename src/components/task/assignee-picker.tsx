@@ -2,7 +2,9 @@
  * Assignee field: free text, as BMAD's plan files allow, with suggestions from the team roster
  * (git authors, GitHub users, earlier assignees). Arrow keys pick, Enter or blur saves.
  */
-import { Bot, UserRound } from 'lucide-react';
+import { CommitCount, PersonKindIcon } from '@/components/common/person-meta';
+import { MemberAvatar } from '@/components/common/member-avatar';
+import { Assignee } from '../board/chips';
 import { useEffect, useRef, useState } from 'react';
 import { usePeople } from '@/app/use-people';
 import type { Member } from '@/domain';
@@ -10,13 +12,11 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 
 function Avatar({ m }: { m: Member }) {
-  if (m.avatarUrl) return <img src={m.avatarUrl} alt="" className="size-5 shrink-0 rounded-full" />;
-  const Icon = m.agent ? Bot : UserRound;
-  return <span className={cn('grid size-5 shrink-0 place-items-center rounded-full', m.agent ? 'bg-info/15 text-info' : 'bg-primary/12 text-primary')}><Icon className="size-3" /></span>;
+  return <MemberAvatar name={m.name} avatarUrl={m.avatarUrl} agent={m.agent} initialsForDefaults />;
 }
 
 function detail(m: Member): string {
-  const bits = [m.agent ? 'agent' : m.login ? `@${m.login}` : m.email, m.commits ? `${m.commits} commit${m.commits === 1 ? '' : 's'}` : m.sources.includes('tickets') ? 'assigned before' : undefined];
+  const bits = [m.login ? `@${m.login}` : m.email];
   return bits.filter(Boolean).join(' · ');
 }
 
@@ -34,7 +34,7 @@ export function AssigneePicker({ workspaceId, value, onCommit }: { workspaceId: 
   }, [value]);
 
   const q = typed ? text.trim().toLowerCase() : '';
-  const matches = people.filter((m) => !q || m.name.toLowerCase().includes(q) || m.login?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)).slice(0, 8);
+  const matches = people.filter((m) => !q || m.name.toLowerCase().includes(q) || m.login?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.aliases?.some((a) => a.toLowerCase().includes(q))).slice(0, 8);
 
   const commit = (name: string) => {
     setOpen(false);
@@ -47,9 +47,11 @@ export function AssigneePicker({ workspaceId, value, onCommit }: { workspaceId: 
   };
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-2">
+      <Assignee workspaceId={workspaceId} name={value || undefined} />
       <Input
         size="sm"
+        className="min-w-0 flex-1"
         role="combobox"
         aria-expanded={open}
         aria-autocomplete="list"
@@ -85,7 +87,7 @@ export function AssigneePicker({ workspaceId, value, onCommit }: { workspaceId: 
             >
               <Avatar m={m} />
               <span className="min-w-0 flex-1 truncate">{m.name}</span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">{detail(m)}</span>
+              <span className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground"><PersonKindIcon agent={m.agent} />{detail(m)}{m.commits > 0 && <CommitCount count={m.commits} context="in the scanned history" className="text-[11px]" />}</span>
             </li>
           ))}
         </ul>

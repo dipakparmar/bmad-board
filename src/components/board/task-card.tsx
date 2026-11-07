@@ -1,3 +1,4 @@
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { ListChecks, Link2 } from 'lucide-react';
@@ -25,8 +26,8 @@ export function TaskCardBody({ ticket, dragging = false }: { ticket: Ticket; dra
       )}
     >
       <div className="flex h-4.5 items-center justify-between gap-2">
-        <span className={cn('truncate font-mono text-[11px] leading-3.5', done ? 'text-board-id-done' : 'text-board-id')}>{ticket.ref}</span>
-        {show.assignee && <Assignee name={leaf.plan?.assignee} />}
+        <span className="flex min-w-0 items-center gap-1.5"><TicketTypeIcon type={leaf.type} /><span className={cn('truncate font-mono text-[11px] leading-3.5', done ? 'text-board-id-done' : 'text-board-id')}>{ticket.ref}</span></span>
+        {show.assignee && <Assignee workspaceId={ticket.workspaceId} name={leaf.plan?.assignee} />}
       </div>
       <div className={cn(compact ? 'mt-0.5 line-clamp-2' : 'mt-1 line-clamp-3', 'break-words text-[13px] leading-[18px]', done ? 'text-board-title-done' : 'font-medium text-board-title')}>{leaf.title}</div>
       {!done && (

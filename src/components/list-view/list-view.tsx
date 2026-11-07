@@ -1,3 +1,4 @@
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
 /** Kaneo-style list, grouped by epic in build order. Dragging rows inside an epic rewrites its tickets.toml order. */
 import { usePaged } from '../common/show-more';
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -51,6 +52,7 @@ function Row({ ticket, sortable }: { ticket: Ticket; sortable: boolean }) {
       <button type="button" aria-label={`Reorder ${ticket.ref}`} className={cn('-ml-1 cursor-grab text-muted-foreground/50 hover:text-foreground', !sortable && 'invisible')} {...attributes} {...listeners}>
         <GripVertical className="size-3.5" />
       </button>
+      <TicketTypeIcon type={leaf.type} />
       <span title={ticket.ref} className="w-12 shrink-0 truncate font-mono text-[11px] text-board-id">{ticket.ref}</span>
       <button type="button" onClick={() => select(ticket.uid)} className={cn('min-w-0 flex-1 truncate text-left font-medium', leaf.state === 'done' && 'font-normal text-muted-foreground line-through decoration-muted-foreground/40')}>
         {leaf.title}
@@ -62,7 +64,7 @@ function Row({ ticket, sortable }: { ticket: Ticket; sortable: boolean }) {
         <HitlChip leaf={leaf} />
       </div>
       <span className="w-28 shrink-0"><StatusLabel leaf={leaf} /></span>
-      <Assignee name={leaf.plan?.assignee} />
+      <Assignee workspaceId={ticket.workspaceId} name={leaf.plan?.assignee} />
     </div>
   );
 }
@@ -91,7 +93,7 @@ function GroupSection({ group }: { group: Group }) {
     <section className="overflow-hidden rounded-xl border border-border bg-card">
       <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 bg-board-lane px-3 py-2 text-left">
         <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', !open && '-rotate-90')} />
-        <span className="font-medium text-[13px]">{group.title}</span>
+        <TicketTypeIcon type={group.folder === 'backlog' ? 'story' : group.tickets[0]?.epic ? 'epic' : 'initiative'} /><span className="font-medium text-[13px]">{group.title}</span>
         <span className="text-xs text-muted-foreground">{group.subtitle}</span>
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">{group.tickets.filter((t) => t.leaf.state === 'done').length}/{group.tickets.length} done</span>
       </button>

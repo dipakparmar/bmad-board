@@ -9,6 +9,8 @@ import type { BoardState, LeafType, Risk } from '../domain';
 import type { Readiness, Ticket } from './view-model';
 
 export interface Filters {
+  /** Current dated sprint by default; all, unscheduled, or an explicit sprint id. */
+  sprint?: string;
   states: BoardState[];
   readiness: Readiness[];
   /** Assignee names, lower-cased; `-` means unassigned. */
@@ -63,6 +65,7 @@ export function filtersToParams(f: Filters, p = new URLSearchParams()): URLSearc
   for (const [field, key] of Object.entries(KEYS) as [keyof typeof KEYS, string][]) {
     if (f[field].length) p.set(key, f[field].join(','));
   }
+  if (f.sprint && f.sprint !== 'current') p.set('sp', f.sprint);
   if (f.kind !== 'all') p.set('kind', f.kind);
   if (f.hitl) p.set('hitl', '1');
   if (f.hideDone) p.set('done', '0');
@@ -71,10 +74,11 @@ export function filtersToParams(f: Filters, p = new URLSearchParams()): URLSearc
 
 /** Filters from URL params, or null when the URL carries none. */
 export function filtersFromParams(p: URLSearchParams): Filters | null {
-  const any = [...Object.values(KEYS), 'kind', 'hitl', 'done'].some((k) => p.has(k));
+  const any = [...Object.values(KEYS), 'sp', 'kind', 'hitl', 'done'].some((k) => p.has(k));
   if (!any) return null;
   const list = (k: string) => (p.get(k) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   return {
+    ...(p.has('sp') ? { sprint: p.get('sp') || 'current' } : {}),
     states: list(KEYS.states) as BoardState[],
     readiness: list(KEYS.readiness) as Readiness[],
     who: list(KEYS.who).map((w) => w.toLowerCase()),

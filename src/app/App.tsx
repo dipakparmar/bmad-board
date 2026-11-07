@@ -9,6 +9,9 @@ import { AppSidebar, SidebarRail } from '@/components/layout/app-sidebar';
 import { ShortcutsDialog } from '@/components/dialogs/shortcuts-dialog';
 import { SettingsView } from '@/components/settings/settings-view';
 import { DocsView } from '@/components/docs/docs-view';
+import { ProjectLoading } from '@/components/layout/loading-state';
+import { Spinner } from '@/components/ui/spinner';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/layout/empty-state';
 import { Header } from '@/components/layout/header';
 import { ListView } from '@/components/list-view/list-view';
@@ -59,7 +62,8 @@ function Notices() {
 
 function Shell() {
   const state = useBoardContext();
-  const { board, view, expanded, selected, preferences } = state;
+  const { board, view, expanded, selected, preferences, loadState, inScope } = state;
+  const waitingForData = loadState.initial || (loadState.busy && !inScope.length && view !== 'settings');
   const connected = board.workspaces.length > 0;
   const [help, setHelp] = useState(false);
   useShortcuts(state, useCallback(() => setHelp(true), []));
@@ -77,9 +81,10 @@ function Shell() {
           <>
             <Header />
             <Notices />
-            <div className="min-h-0 flex-1 overflow-auto p-5">{view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : view === 'settings' ? <SettingsView /> : view === 'docs' ? <DocsView /> : <NextView />}</div>
+            {loadState.busy && !waitingForData && <div role="status" className="flex items-center gap-2 px-5 pt-3 text-xs text-muted-foreground"><Spinner aria-hidden="true" className="size-3.5" />Updating project data. Showing the tickets already loaded.</div>}
+            <div aria-busy={loadState.busy} className="min-h-0 flex-1 overflow-auto p-5">{waitingForData ? <ProjectLoading labels={loadState.pending.map((w) => w.store.label)} /> : loadState.failed ? <div role="alert" className="rounded-lg border border-destructive/30 p-5"><h2 className="text-sm font-medium">Could not load project data</h2>{loadState.errors.map((w) => <div key={w.store.id} className="mt-3 text-sm"><p>{w.store.label}: {w.error}</p><Button size="sm" variant="outline" className="mt-2" onClick={() => { const workspace = board.workspaces.find((item) => item.store.id === w.store.id); if (workspace) void board.reload(workspace.store); }}>Try again</Button></div>)}</div> : view === 'board' ? <KanbanBoard /> : view === 'list' ? <ListView /> : view === 'standup' ? <StandupView /> : view === 'graph' ? <GraphView /> : view === 'settings' ? <SettingsView /> : view === 'docs' ? <DocsView /> : <NextView />}</div>
           </>
-        ) : <EmptyState />}
+        ) : board.initializing ? <ProjectLoading /> : <EmptyState />}
       </main>
       <TaskSheet />
       <CommitDialog />

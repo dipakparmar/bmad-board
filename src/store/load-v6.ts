@@ -109,7 +109,7 @@ export async function loadV6Tree(src: FileSource, outputFolder: string): Promise
       const retroFile = implFiles.find((n) => new RegExp(`^epic-${num}-retro`).test(n));
       const title = planned?.title ?? `Epic ${num}`;
       epic = {
-        type: 'epic', slug: `epic-${num}`, id: num, title, description: planned?.goal.split('\n\n')[0] ?? '',
+        type: 'epic', owner: status?.owner, slug: `epic-${num}`, id: num, title, description: planned?.goal.split('\n\n')[0] ?? '',
         path: epicsFile.files.get(num) ?? epicsFile.path ?? statusPath,
         status: status?.status === 'done' ? 'done' : status?.status === 'in-progress' ? 'in-progress' : undefined,
         covers: [], after: [], gates: [], refined: true, companions: [], body: planned?.goal ?? '', leaves: [],
@@ -124,27 +124,35 @@ export async function loadV6Tree(src: FileSource, outputFolder: string): Promise
     return epic;
   };
 
-  const leafFor = async (num: number, story: string, key: string | undefined, slug: string, yamlStatus: ReturnType<typeof laterStatus>, owner?: string): Promise<Leaf> => {
+  const leafFor = async (num: number, story: string, key: string | undefined, slug: string, yamlStatus: ReturnType<typeof laterStatus>, owner?: string, sprintId?: string | null): Promise<Leaf> => {
     const epic = epicFor(num);
     const planned = epicsFile.doc.epics.find((e) => e.num === num)?.stories.find((s) => s.story === story);
     const path = stories.get(`${num}-${story}`);
     let file: Leaf['file'];
+    let fileSprint: string | undefined;
+    let fileOwner: string | undefined;
+    let fileAssignee: string | undefined;
     let parsed: ReturnType<typeof parseStoryFile> | undefined;
     // "### Story 1.2: Title" has the slug `story-12-title`; the reader matches on the prefix.
     let docs: DocLink[] = epicsLink(`story-${num}${story}-`, `Story ${num}.${story} in the epics file`);
     if (path) {
-      const { body } = parseFrontmatter((await src.read(path)) ?? '');
+      const { body, data } = parseFrontmatter((await src.read(path)) ?? '');
       parsed = parseStoryFile(body);
+      fileSprint = typeof data.sprint === 'string' ? data.sprint.trim() || undefined : undefined;
+      fileOwner = typeof data.owner === 'string' ? data.owner.trim() || undefined : undefined;
+      fileAssignee = typeof data.assignee === 'string' ? data.assignee.trim() : undefined;
       file = { path, body, refined: true };
       docs = [...docLinks({ body }, { baseDir: path.slice(0, path.lastIndexOf('/')), outputFolder: paths.output }), ...docs];
     }
     const v6 = laterStatus(yamlStatus, parsed?.status ?? (path ? 'ready-for-dev' : null));
     const status = parsed?.blocked && v6 !== 'done' ? 'blocked' : leafStatusFromV6(v6);
-    const assignee = parsed?.assignee ?? owner;
+    const assignee = parsed?.assignee ?? fileAssignee ?? fileOwner ?? parsed?.owner ?? owner;
     const id = /^\d+$/.test(story) ? Number(story) : story;
     const title = planned?.title || parsed?.title || slugTitle(slug);
     return {
       // Once a story file exists it is newer than the epics file, so its title wins.
+      sprint: sprintId === null ? undefined : sprintId ?? fileSprint,
+      owner: fileOwner ?? parsed?.owner ?? owner ?? fileAssignee,
       key: `${epic.slug}/${story}`, id, type: 'story', title: parsed?.title ?? title, folder: epic.slug, dir: paths.implementation, initiative: 'sprint',
       entry: {
         id, type: 'story', title, description: planned?.body ?? parsed?.story ?? '', verify: parsed?.acceptance,
@@ -164,7 +172,7 @@ export async function loadV6Tree(src: FileSource, outputFolder: string): Promise
   };
 
   for (const e of sprint.epics) epicFor(e.num);
-  for (const s of sprint.stories) epicFor(s.epic).leaves.push(await leafFor(s.epic, s.story, s.key, s.slug, s.status, s.owner));
+  for (const s of sprint.stories) epicFor(s.epic).leaves.push(await leafFor(s.epic, s.story, s.key, s.slug, s.status, s.owner, s.sprint));
   // Stories planned in the epics file that sprint planning hasn't picked up yet are backlog.
   for (const planned of epicsFile.doc.epics) {
     const epic = epicFor(planned.num);

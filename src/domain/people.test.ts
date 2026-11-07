@@ -33,3 +33,13 @@ describe('people', () => {
     expect(merged[1]?.agent).toBe(true);
   });
 });
+
+test('GitHub web commit signer is automation while personal private emails stay human', () => {
+  const members = membersFromGitLog([
+    { name: 'Person', email: 'person@test', date: '2026-11-07', committerName: 'GitHub', committerEmail: 'noreply@github.com' },
+    { name: 'Dipak', email: '42+dipakparmar@users.noreply.github.com', date: '2026-11-07' },
+  ]);
+  expect(members.find((m) => m.name === 'GitHub')?.agent).toBe(true);
+  expect(members.find((m) => m.name === 'Person')?.agent).toBe(false);
+  expect(members.find((m) => m.name === 'Dipak')?.agent).toBe(false);
+});

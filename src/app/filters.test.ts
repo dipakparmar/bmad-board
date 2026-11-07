@@ -29,3 +29,10 @@ describe('filters', () => {
     expect(activeCount(f)).toBe(8);
   });
 });
+
+test('an explicit all-tickets sprint choice survives URL sharing instead of reverting to current', () => {
+  const filters = { ...NO_FILTERS, sprint: 'all' };
+  const params = filtersToParams(filters);
+  expect(params.get('sp')).toBe('all');
+  expect(filtersFromParams(params)).toEqual(filters);
+});

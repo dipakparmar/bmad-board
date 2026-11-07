@@ -1,9 +1,11 @@
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
 /**
  * "What's next": the board as the AI-driven loop sees it. Agents take ready tickets; people answer
  * blocks, refine, and call built work done. Same grouping as BMAD's `tickets.py next`.
  */
 import { CheckCheck, Hourglass, Inbox, PlayCircle, Sparkles, Timer } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { textPreview } from '@/app/text-preview';
 import { setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import { refOf, type Ticket } from '@/app/view-model';
@@ -35,19 +37,20 @@ function Lane({ title, hint, icon: Icon, tone, tickets, children }: { title: str
   );
 }
 
-function Row({ ticket, children, note }: { ticket: Ticket; children?: ReactNode; note?: ReactNode }) {
+function Row({ ticket, children, note }: { ticket: Ticket; children?: ReactNode; note?: string }) {
   const { select } = useBoardContext();
   const { leaf } = ticket;
   const progress = planProgress(leaf.plan?.body);
   return (
-    <div role="button" tabIndex={0} onClick={() => select(ticket.uid)} onKeyDown={(e) => e.key === 'Enter' && select(ticket.uid)} className="flex flex-col gap-2 rounded-[10px] border border-board-card-border bg-board-card p-3 text-left shadow-board-card hover:border-board-card-border-hover">
+    <div role="button" aria-label={`Open ${ticket.ref}: ${leaf.title}`} tabIndex={0} onClick={() => select(ticket.uid)} onKeyDown={(e) => e.key === 'Enter' && select(ticket.uid)} className="flex flex-col gap-2 rounded-[10px] border border-board-card-border bg-board-card p-3 text-left shadow-board-card hover:border-board-card-border-hover">
       <div className="flex items-center gap-2">
         <StateIcon state={leaf.state} className="size-3.5" />
+        <TicketTypeIcon type={leaf.type} />
         <span title={ticket.ref} className="max-w-24 truncate font-mono text-[11px] text-board-id">{ticket.ref}</span>
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{leaf.title}</span>
-        <Assignee name={leaf.plan?.assignee} />
+        <Assignee workspaceId={ticket.workspaceId} name={leaf.plan?.assignee} />
       </div>
-      {note && <div className="text-xs text-muted-foreground">{note}</div>}
+      {note && <p className="line-clamp-3 break-words text-xs text-muted-foreground">{textPreview(note)}</p>}
       <div className="flex flex-wrap items-center gap-1">
         <TypeChip leaf={leaf} />
         <RiskChip leaf={leaf} />

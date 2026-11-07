@@ -1,3 +1,4 @@
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
 /** Right-hand properties, as in Kaneo's task sheet: status, assignee, risk, needs-a-person, block. */
 import { ExternalLink, FileText } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/cn';
-import { STATUS_HELP, StateIcon } from '../board/chips';
+import { Assignee, STATUS_HELP, StateIcon } from '../board/chips';
 import { AssigneePicker } from './assignee-picker';
 import { CommitLink, FileLink } from '../common/links';
 
@@ -33,7 +34,7 @@ function ContainerLink({ ticket, kind }: { ticket: Ticket; kind: 'epic' | 'initi
     if (view === 'settings' || view === 'docs') setView('board');
   };
   return (
-    <span className="flex min-w-0 items-center gap-1">
+    <span className="flex min-w-0 items-center gap-1"><TicketTypeIcon type={kind} />
       <button type="button" onClick={show} title={`Show the ${kind}'s tickets`} className="min-w-0 truncate text-left text-primary underline-offset-2 hover:underline">{c.title}</button>
       {c.path && <FileLink workspaceId={ticket.workspaceId} path={c.path} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"><FileText className="size-3.5" aria-label={`Open the ${kind} file`} /></FileLink>}
     </span>
@@ -70,7 +71,7 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
         )}
       </Row>
       <Row label="Assignee">
-        {ro ? (leaf.plan?.assignee ?? 'Unassigned') : (
+        {ro ? <span className="inline-flex items-center gap-2"><Assignee workspaceId={ticket.workspaceId} name={leaf.plan?.assignee} />{leaf.plan?.assignee || 'Unassigned'}</span> : (
           <AssigneePicker
             workspaceId={ticket.workspaceId}
             value={leaf.plan?.assignee ?? ''}
@@ -78,6 +79,9 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
           />
         )}
       </Row>
+      {leaf.owner && leaf.owner !== leaf.plan?.assignee && <Row label="Story owner"><span className="inline-flex items-center gap-2"><Assignee workspaceId={ticket.workspaceId} name={leaf.owner} />{state.resolvePerson(ticket.workspaceId, leaf.owner)?.name ?? leaf.owner}</span></Row>}
+      {ticket.epic?.owner && <Row label="Epic owner"><span className="inline-flex items-center gap-2"><Assignee workspaceId={ticket.workspaceId} name={ticket.epic.owner} />{state.resolvePerson(ticket.workspaceId, ticket.epic.owner)?.name ?? ticket.epic.owner}</span></Row>}
+      {ticket.initiative?.owner && <Row label="Initiative owner"><span className="inline-flex items-center gap-2"><Assignee workspaceId={ticket.workspaceId} name={ticket.initiative.owner} />{state.resolvePerson(ticket.workspaceId, ticket.initiative.owner)?.name ?? ticket.initiative.owner}</span></Row>}
       {!leaf.v6 && (
         <>
       <Row label="Risk">
@@ -97,7 +101,8 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
       </Row>
         </>
       )}
-      <Row label="Type"><span title={TYPE_LABELS[leaf.type].help}>{TYPE_LABELS[leaf.type].label}</span>{leaf.file?.severity ? <span title={SEVERITY_LABELS[leaf.file.severity].help}> · {SEVERITY_LABELS[leaf.file.severity].label} ({leaf.file.severity})</span> : ''}</Row>
+      {leaf.sprint && <Row label="Sprint">{leaf.sprint}</Row>}
+      <Row label="Type"><span className="inline-flex items-center gap-1.5" title={TYPE_LABELS[leaf.type].help}><TicketTypeIcon type={leaf.type} />{TYPE_LABELS[leaf.type].label}</span>{leaf.file?.severity ? <span title={SEVERITY_LABELS[leaf.file.severity].help}> · {SEVERITY_LABELS[leaf.file.severity].label} ({leaf.file.severity})</span> : ''}</Row>
       <Row label="Epic">
         {ticket.epic ? <ContainerLink ticket={ticket} kind="epic" /> : leaf.folder === 'backlog' ? 'Backlog' : 'None'}
       </Row>

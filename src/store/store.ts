@@ -40,7 +40,7 @@ function describe(c: TicketChange): string {
 
 /** A TicketStore over any FileSource: the shared loader and planner plus the source's own commit. */
 /** Bump when the parsed tree's shape changes, so trees cached by an older board are not reused. */
-const TREE_FORMAT = 4;
+const TREE_FORMAT = 5;
 
 export class FileTicketStore implements TicketStore {
   private tree: TicketTree | null = null;

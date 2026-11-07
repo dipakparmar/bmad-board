@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { isAgent, type DocLink } from '@/domain';
+import { isAgent, membersFromAssignees, mergeMembers, type Member, type DocLink } from '@/domain';
 import { filtersFromParams, filtersToParams, LARGE_PROJECT, matches, NO_FILTERS, type Filters } from './filters';
+import { createPersonResolver, resolveMembers } from '@/domain/identities';
+import { matchesSprint } from '@/domain/sprints';
+import { workspaceLoadState } from './loading-state';
+import { resolveTicketPeople } from './ticket-people';
+import { useIdentitySettings } from './identity-settings';
 import { loadPreferences, usePreferences } from './preferences';
 import { loadAuthor, useBoard } from './use-board';
 import { ticketsOf, type Ticket } from './view-model';
@@ -87,6 +92,15 @@ function initialFilters(): { filters: Filters; chosen: boolean } {
 function useBoardState() {
   const board = useBoard();
   const preferences = usePreferences();
+  const identities = useIdentitySettings();
+  const [remotePeople, setRemotePeople] = useState<Record<string, Member[]>>({});
+  useEffect(() => {
+    let live = true;
+    void Promise.all(board.workspaces.map(async (w) => [w.store.id, await w.store.people().catch(() => [] as Member[])] as const)).then((entries) => {
+      if (live) setRemotePeople(Object.fromEntries(entries));
+    });
+    return () => { live = false; };
+  }, [board.workspaces]);
   const [mineOnly, setMineOnly] = useState(false);
   const [scope, setScope] = useState<Scope>({});
   const [{ filters, chosen }, setFilterState] = useState(initialFilters);
@@ -108,10 +122,27 @@ function useBoardState() {
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'github' | 'new-ticket' | 'search' | null>(null);
 
-  const tickets = useMemo(
+  const rawTickets = useMemo(
     () => board.workspaces.flatMap((w) => (w.tree ? ticketsOf(w.store.id, w.store.label, w.tree, w.store.capabilities.write) : [])),
     [board.workspaces],
   );
+  const rawPeople = useMemo(() => Object.fromEntries(board.workspaces.map((w) => [w.store.id, mergeMembers(
+    remotePeople[w.store.id] ?? [],
+    membersFromAssignees([
+      ...rawTickets.filter((t) => t.workspaceId === w.store.id).flatMap((t) => [t.leaf.plan?.assignee, t.leaf.owner]),
+      ...(w.tree?.sprint?.actionItems.map((a) => a.owner) ?? []),
+      ...(w.tree?.initiatives.flatMap((i) => [i.owner, ...i.epics.map((e) => e.owner)]) ?? []),
+    ]),
+  )])), [board.workspaces, remotePeople, rawTickets]);
+  const people = useMemo(() => Object.fromEntries(Object.entries(rawPeople).map(([id, members]) => [id, resolveMembers(members, identities.settings[id] ?? [])])), [rawPeople, identities.settings]);
+  const resolvePerson = useMemo(() => {
+    const resolvers = new Map(board.workspaces.map((w) => [w.store.id, createPersonResolver(
+      (people[w.store.id] ?? []).map((m) => ({ ...m, agent: m.agent || isAgent(m.name, w.tree?.board) })),
+      identities.settings[w.store.id] ?? [],
+    )]));
+    return (workspaceId: string, name: string) => resolvers.get(workspaceId)?.(name);
+  }, [board.workspaces, identities.settings, people]);
+  const tickets = useMemo(() => rawTickets.map((t) => resolveTicketPeople(t, (name) => resolvePerson(t.workspaceId, name))), [rawTickets, resolvePerson]);
   // A big project opens without its done tickets, until the person picks filters of their own.
   useEffect(() => {
     if (!chosen && tickets.length > LARGE_PROJECT) setFilterState({ filters: { ...NO_FILTERS, hideDone: true }, chosen: true });
@@ -128,11 +159,13 @@ function useBoardState() {
       (!scope.workspaceId || t.workspaceId === scope.workspaceId) &&
       (!scope.initiative || t.initiative?.slug === scope.initiative) &&
       (!scope.epic || (scope.epic === 'backlog' ? t.leaf.folder === 'backlog' : t.epic?.slug === scope.epic)) &&
-      (!mineOnly || (!!me && t.leaf.plan?.assignee?.trim().toLowerCase() === me)) &&
-      matches(t, filters, agentCheck) &&
+      (!mineOnly || (!!me && t.leaf.plan?.assignee?.trim().toLowerCase() === (resolvePerson(t.workspaceId, me)?.name.toLowerCase() ?? me))) &&
+      matchesSprint(t.leaf.sprint, filters.sprint, board.workspaces.find((w) => w.store.id === t.workspaceId)?.tree?.sprints ?? []) &&
+      matches(t, { ...filters, who: filters.who.map((name) => resolvePerson(t.workspaceId, name)?.name.toLowerCase() ?? name) }, (name) => resolvePerson(t.workspaceId, name)?.agent ?? ((people[t.workspaceId] ?? []).find((m) => m.name.toLowerCase() === name.toLowerCase())?.agent || agentCheck(name))) &&
       (!q || `${t.ref} ${t.leaf.title} ${t.leaf.plan?.assignee ?? ''} ${t.epic?.title ?? ''} ${t.leaf.type}`.toLowerCase().includes(q)),
     );
-  }, [tickets, scope, search, mineOnly, me, filters, agentCheck]);
+  }, [tickets, scope, search, mineOnly, me, filters, agentCheck, resolvePerson, people, board.workspaces]);
+  const loadState = workspaceLoadState(board.workspaces, scope.workspaceId, board.initializing);
   const selected: Ticket | null = tickets.find((t) => t.uid === selectedUid) ?? null;
   const [expanded, setExpanded] = useState(false);
 
@@ -231,7 +264,7 @@ function useBoardState() {
     if (!uid) setExpanded(false);
   };
 
-  return { board, doc, setDoc, openDoc, graphFocus, setGraphFocus, commit, openCommit: (workspaceId: string, sha: string) => setCommit({ workspaceId, sha }), closeCommit: () => setCommit(null), closeDoc, preferences, mineOnly, setMineOnly, filters, setFilters, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
+  return { board, loadState, identities, rawPeople, people, resolvePerson, doc, setDoc, openDoc, graphFocus, setGraphFocus, commit, openCommit: (workspaceId: string, sha: string) => setCommit({ workspaceId, sha }), closeCommit: () => setCommit(null), closeDoc, preferences, mineOnly, setMineOnly, filters, setFilters, scope, setScope, view, setView, search, setSearch, tickets, inScope, selected, select, expanded, setExpanded, dialog, setDialog };
 }
 
 export type BoardState = ReturnType<typeof useBoardState>;

@@ -37,8 +37,8 @@ export interface V6SprintStatus {
   projectKey?: string;
   trackingSystem?: string;
   storyLocation?: string;
-  epics: { num: number; status: V6EpicStatus; retrospective?: V6RetroStatus }[];
-  stories: { key: string; epic: number; story: string; slug: string; status: V6StoryStatus; owner?: string }[];
+  epics: { num: number; status: V6EpicStatus; owner?: string; retrospective?: V6RetroStatus }[];
+  stories: { key: string; epic: number; story: string; slug: string; status: V6StoryStatus; owner?: string; sprint?: string | null }[];
   actionItems: V6ActionItem[];
   problems: string[];
 }
@@ -113,6 +113,7 @@ export function parseSprintStatus(source: string, where = 'sprint-status.yaml'):
     m = EPIC_KEY.exec(key);
     if (m) {
       const e = epicOf(Number(m[1]));
+      e.owner = text(fields.owner ?? fields.assignee);
       // `contexted` was v6's early name for an epic under way.
       if (status === 'done' || status === 'completed') e.status = 'done';
       else if (status === 'in-progress' || status === 'contexted') e.status = 'in-progress';
@@ -124,7 +125,7 @@ export function parseSprintStatus(source: string, where = 'sprint-status.yaml'):
       const parsed = v6StoryStatus(fields.status);
       if (!parsed) out.problems.push(`${where}: ${key} has unknown status ${JSON.stringify(fields.status)}; reads as backlog`);
       epicOf(Number(m[1]));
-      out.stories.push({ key, epic: Number(m[1]), story: m[2] ?? '', slug: m[3] ?? '', status: parsed ?? 'backlog', owner: text(fields.owner ?? fields.assignee) });
+      out.stories.push({ key, epic: Number(m[1]), story: m[2] ?? '', slug: m[3] ?? '', status: parsed ?? 'backlog', owner: text(fields.owner ?? fields.assignee), sprint: 'sprint' in fields ? text(fields.sprint) ?? null : undefined });
       continue;
     }
     out.problems.push(`${where}: ${key} is not an epic, story or retrospective key`);
@@ -213,6 +214,7 @@ export interface V6StoryFile {
   openReviewItems: number;
   /** `Assignee:` and `Blocked:` lines the board writes under `Status:`; v6 has no field for either. */
   assignee?: string;
+  owner?: string;
   blocked?: { reason: string; since?: string };
 }
 
@@ -260,7 +262,8 @@ export function parseStoryFile(body: string): V6StoryFile {
     acceptance: s.get('acceptance criteria'),
     tasks,
     openReviewItems: [...(tasks ?? '').matchAll(/^\s*[-*]\s+\[ \]\s+\[AI-Review\]/gim)].length,
-    assignee: field(body, 'Assignee'),
+    assignee: /^[ \t]*(?:\*\*)?Assignee(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*([^\r\n]*)$/im.exec(body)?.[1]?.replace(/\*\*$/, '').trim(),
+    owner: field(body, 'Owner'),
     blocked: parseBlocked(field(body, 'Blocked')),
   };
 }

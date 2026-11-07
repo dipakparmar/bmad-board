@@ -42,7 +42,9 @@ export function ticketsOf(workspaceId: string, workspace: string, tree: TicketTr
   for (const l of next.readyToRefine) readiness.set(l.key, { r: 'refine', waitingOn: [] });
   for (const l of next.inProgress) readiness.set(l.key, { r: 'active', waitingOn: [] });
   for (const b of next.blocked) readiness.set(b.leaf.key, { r: 'blocked', waitingOn: b.waitingOn, reason: b.reason });
-  return allLeaves(tree).map((leaf) => {
+  return allLeaves(tree).map((sourceLeaf) => {
+    // An owner can exist before a build plan. This projection never changes the store's write paths.
+    const leaf = !sourceLeaf.plan && sourceLeaf.owner ? { ...sourceLeaf, plan: { path: '', ticket: String(sourceLeaf.id ?? ''), status: sourceLeaf.status, assignee: sourceLeaf.owner, body: '' } } : sourceLeaf;
     const ready = readiness.get(leaf.key) ?? { r: 'closed' as const, waitingOn: [] };
     const { initiative, epic } = where.get(leaf.key) ?? {};
     const ref = epic?.id !== undefined && leaf.id !== null ? `${epic.id}.${leaf.id}` : leaf.id !== null ? String(leaf.id) : leaf.key.slice(leaf.key.indexOf('/') + 1).replace(/\.md$/, '');

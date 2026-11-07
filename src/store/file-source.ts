@@ -1,3 +1,4 @@
+import { parseChangedBy } from '../domain/people';
 import type { Member } from '../domain';
 /**
  * Where bytes come from. Paths are POSIX-style and relative to the project root (the folder holding `_bmad/`).
@@ -24,13 +25,15 @@ export interface Activity {
   subject: string;
   /** From the `Changed-by:` trailer the board writes, e.g. `person:Dipak`. */
   changedBy?: string;
+  coAuthors?: string[];
   paths: string[];
   url?: string;
 }
 
 /** `Changed-by: person:Dipak via bmad-board` → `person:Dipak`. */
 export function changedByOf(body: string): string | undefined {
-  return /^Changed-by:\s*(\S+)/m.exec(body)?.[1];
+  const parsed = parseChangedBy(/^Changed-by:[ \t]*(.+)$/im.exec(body)?.[1] ?? '');
+  return parsed ? `${parsed.agent ? 'agent' : 'person'}:${parsed.name}` : undefined;
 }
 
 /** One commit in full: who, when, why, and what it changed. Paths are relative to the project root. */
@@ -154,4 +157,9 @@ export class MemorySource implements FileSource {
     this.commits.push({ message, author, paths });
     return { paths, commit: `mem-${this.commits.length}` };
   }
+}
+
+/** Co-authors remain separate contributors, including humans on bot-authored commits. */
+export function coAuthorsOf(body: string): string[] {
+  return [...new Set([...body.matchAll(/^Co-authored-by:[ \t]*(.+?)[ \t]*<[^>]+>[ \t]*$/gim)].map((m) => (m[1] ?? '').trim()).filter(Boolean))];
 }

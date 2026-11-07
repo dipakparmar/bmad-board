@@ -1,3 +1,5 @@
+import { CommitCount, PersonKindIcon } from '@/components/common/person-meta';
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
 /**
  * Stand-up: one card per person or agent with what they finished, what they're on, what waits on
  * review and what blocks them. "Run stand-up" walks the team one member at a time with a timer.
@@ -6,7 +8,7 @@
  * and the notes box stays pinned at the bottom of its card, so nobody scrolls the page to reach it.
  * Full screen hides the rest of the board for running the meeting on a shared screen.
  */
-import { Bot, CheckCheck, ChevronLeft, ChevronRight, ClipboardCopy, Hand, Maximize2, Minimize2, Pencil, Play, Save, Square, UserRound } from 'lucide-react';
+import { Ban, CheckCheck, ChevronLeft, ChevronRight, ClipboardCopy, Hand, Maximize2, Minimize2, Pencil, Play, Save, Square } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { applyWithToast, setStatus } from '@/app/actions';
@@ -18,7 +20,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/c
 import { Textarea } from '@/components/ui/textarea';
 import { AssigneePicker } from '../task/assignee-picker';
 import { cn } from '@/lib/cn';
-import { StateIcon } from '../board/chips';
+import { Assignee, StateIcon } from '../board/chips';
 import { actorOf, useHistory } from '../next/activity-feed';
 
 type Since = 'workday' | '24h' | '7d';
@@ -42,7 +44,7 @@ function TicketLine({ ticket, note }: { ticket: Ticket; note?: string }) {
       <div className="flex items-start gap-1">
         <button type="button" onClick={() => state.select(ticket.uid)} className="flex min-w-0 flex-1 items-start gap-2 px-1.5 py-1 text-left">
           <StateIcon state={ticket.leaf.state} className="mt-0.5 size-3.5 shrink-0" />
-          <span className="font-mono text-[11px] text-board-id">{ticket.ref}</span>
+          <TicketTypeIcon type={ticket.leaf.type} className="mt-0.5" /><span className="font-mono text-[11px] text-board-id">{ticket.ref}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px]">{ticket.leaf.title}</span>
             {note && <span className="block text-xs text-muted-foreground">{note}</span>}
@@ -81,19 +83,18 @@ function Section({ title, tone, children, empty }: { title: string; tone: string
   );
 }
 
-function MemberCard({ m, focused, big, note, onNote, className }: { m: StandupMember<Ticket>; focused?: boolean; big?: boolean; note: string; onNote: (v: string) => void; className?: string }) {
-  const Icon = m.agent ? Bot : UserRound;
+function MemberCard({ m, workspaceId, focused, big, note, onNote, className }: { m: StandupMember<Ticket>; workspaceId?: string; focused?: boolean; big?: boolean; note: string; onNote: (v: string) => void; className?: string }) {
   // Commits that touched no ticket we know of still count as work done; list a few.
   const loose = m.finished.length ? [] : m.commits.slice(0, big ? 8 : 3);
   return (
     <section className={cn('flex min-h-0 flex-col rounded-xl border bg-board-card shadow-board-card', focused ? 'border-primary ring-2 ring-primary/20' : 'border-board-card-border', className)}>
       <header className={cn('flex shrink-0 items-center gap-2 border-board-card-border border-b px-4 py-3', big && 'px-6 py-4')}>
-        <span className={cn('grid size-7 place-items-center rounded-full', m.agent ? 'bg-info/15 text-info' : 'bg-primary/12 text-primary')}><Icon className="size-4" /></span>
+        <Assignee workspaceId={workspaceId} name={m.name} className="size-7 text-[11px]" />
         <div className="min-w-0 flex-1">
           <div className={cn('truncate font-medium', big ? 'text-lg' : 'text-sm')}>{m.name}</div>
-          <div className="text-xs text-muted-foreground">{m.agent ? 'Agent' : 'Person'} · {m.commits.length} commit{m.commits.length === 1 ? '' : 's'} since</div>
+          <div className="mt-0.5 flex items-center gap-2.5"><PersonKindIcon agent={m.agent} /><CommitCount count={m.commits.length} context="since the selected stand-up cutoff" /></div>
         </div>
-        {m.blocked.length > 0 && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive-foreground">{m.blocked.length} blocked</span>}
+        {m.blocked.length > 0 && <span role="img" title={`${m.blocked.length} blocked tickets`} aria-label={`${m.blocked.length} blocked tickets`} className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive"><Ban aria-hidden="true" className="size-3" /><span aria-hidden="true">{m.blocked.length}</span></span>}
       </header>
       <div className={cn('flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3', big && 'px-6')} data-slot="standup-sections">
         <Section title="Done since" tone="text-success" empty="Nothing new.">
@@ -134,7 +135,7 @@ function useTimer(running: boolean, resetKey: unknown) {
 }
 
 export function StandupView() {
-  const { inScope, board, scope } = useBoardContext();
+  const { inScope, board, scope, resolvePerson } = useBoardContext();
   const { preferences } = useBoardContext();
   const [since, setSince] = useState<Since>(preferences.prefs.standupRange);
   const [turn, setTurn] = useState<number | null>(null);
@@ -166,12 +167,15 @@ export function StandupView() {
   const report = useMemo(() => {
     const tickets = inScope.filter((t) => !ws || t.workspaceId === ws.store.id);
     // Saving stand-up notes is bookkeeping, not work done; leave those commits out.
-    const commits: StandupCommit[] = (history ?? []).filter((a) => !(a.paths.length && a.paths.every((p) => p.includes('/standups/')))).map((a) => {
-      const actor = actorOf(a);
-      return { sha: a.sha, date: a.date, subject: a.subject, actor: actor.name, agent: actor.agent, paths: a.paths, url: a.url };
+    const commits: StandupCommit[] = (history ?? []).filter((a) => !(a.paths.length && a.paths.every((p) => p.includes('/standups/')))).flatMap((a) => {
+      const raw = actorOf(a);
+      const actor = ws ? resolvePerson(ws.store.id, raw.name) ?? raw : raw;
+      const actors = [actor, ...(a.coAuthors ?? []).map((name) => (ws ? resolvePerson(ws.store.id, name) : undefined) ?? { name, agent: /agent|claude|codex|copilot|bot/i.test(name) })];
+      const unique = new Map(actors.map((person) => [person.name.toLowerCase(), person]));
+      return [...unique.values()].map((person) => ({ sha: a.sha, date: a.date, subject: a.subject, actor: person.name, agent: person.agent, paths: a.paths, url: a.url }));
     });
-    return standup(tickets, commits, cutoff, ws?.tree?.board);
-  }, [inScope, history, cutoff, ws]);
+    return standup(tickets, commits, cutoff, ws?.tree?.board, ws ? (name) => resolvePerson(ws.store.id, name) : undefined);
+  }, [inScope, history, cutoff, ws, resolvePerson]);
 
   const { members } = report;
   const running = turn !== null;
@@ -280,17 +284,17 @@ export function StandupView() {
             <span className="w-12 text-right font-mono text-xs tabular-nums text-muted-foreground">{clock}</span>
             <Button size="icon-sm" variant="ghost" aria-label="Next" disabled={wrapUp} onClick={() => setTurn((t) => Math.min((t ?? 0) + 1, members.length))}><ChevronRight /></Button>
           </div>
-          {current && <MemberCard m={current} focused big className="flex-1" note={noteFor(current.id)} onNote={setNoteFor(current.id)} />}
-          {wrapUp && <WrapUp unowned={report.unowned} upForGrabs={report.upForGrabs} actions={ws?.tree?.sprint?.actionItems} big team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />}
+          {current && <MemberCard workspaceId={ws?.store.id} m={current} focused big className="flex-1" note={noteFor(current.id)} onNote={setNoteFor(current.id)} />}
+          {wrapUp && <WrapUp unowned={report.unowned} upForGrabs={report.upForGrabs} actions={ws?.tree?.sprint?.actionItems.map((a) => ({ ...a, owner: a.owner ? resolvePerson(ws.store.id, a.owner)?.name ?? a.owner : undefined }))} big team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />}
           <p className="shrink-0 text-center text-xs text-muted-foreground">← → to move between people · Esc to end</p>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto md:flex-row md:overflow-hidden">
           <div className="flex shrink-0 flex-col gap-3 md:min-h-0 md:flex-1 md:shrink md:flex-row md:overflow-x-auto md:pb-1" data-slot="standup-members">
-            {members.length === 0 && <p className="text-sm text-muted-foreground">No one holds a ticket or committed since then. Assign tickets in the ticket sheet to see people here.</p>}
-            {members.map((m) => <MemberCard key={m.id} m={m} className="max-h-[70vh] shrink-0 md:max-h-none md:w-80" note={noteFor(m.id)} onNote={setNoteFor(m.id)} />)}
+            {members.length === 0 && <p role="status" className="text-sm text-muted-foreground">{history === null ? 'Loading recent work and contributors…' : 'No one holds a ticket or committed since then. Assign tickets in the ticket sheet to see people here.'}</p>}
+            {members.map((m) => <MemberCard workspaceId={ws?.store.id} key={m.id} m={m} className="max-h-[70vh] shrink-0 md:max-h-none md:w-80" note={noteFor(m.id)} onNote={setNoteFor(m.id)} />)}
           </div>
-          <WrapUp side unowned={report.unowned} upForGrabs={report.upForGrabs} actions={ws?.tree?.sprint?.actionItems} team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />
+          <WrapUp side unowned={report.unowned} upForGrabs={report.upForGrabs} actions={ws?.tree?.sprint?.actionItems.map((a) => ({ ...a, owner: a.owner ? resolvePerson(ws.store.id, a.owner)?.name ?? a.owner : undefined }))} team={notes.team} onTeam={(v) => updateNotes({ ...notes, team: v })} />
         </div>
       )}
     </div>

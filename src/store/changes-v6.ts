@@ -114,7 +114,7 @@ export async function planV6Changes(tree: TicketTree, src: FileSource, changes: 
         if (change.assignee !== undefined) {
           const a = change.assignee.trim();
           if (a) await editStory(await ensureStory(leaf, await currentStatus(leaf) === 'backlog' ? 'ready-for-dev' : await currentStatus(leaf)), (t) => setStoryField(t, 'Assignee', a));
-          else if (storyPath(leaf)) await editStory(storyPath(leaf) ?? '', (t) => setStoryField(t, 'Assignee', undefined));
+          else if (storyPath(leaf)) await editStory(storyPath(leaf) ?? '', (t) => setStoryField(t, 'Assignee', leaf.owner ? '' : undefined));
         }
         break;
       }
@@ -131,7 +131,7 @@ export async function planV6Changes(tree: TicketTree, src: FileSource, changes: 
           const now = await currentStatus(leaf);
           await editStory(await ensureStory(leaf, now === 'backlog' ? 'ready-for-dev' : now), (t) => setStoryField(t, 'Assignee', a));
         } else if (storyPath(leaf)) {
-          await editStory(storyPath(leaf) ?? '', (t) => setStoryField(t, 'Assignee', undefined));
+          await editStory(storyPath(leaf) ?? '', (t) => setStoryField(t, 'Assignee', leaf.owner ? '' : undefined));
         }
         break;
       }

@@ -70,6 +70,7 @@ function restoreRepo(r: RememberedRepo): GitHubSource {
 
 export function useBoard() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [initializing, setInitializing] = useState(true);
   const [serverAvailable, setServerAvailable] = useState(false);
   const unwatch = useRef(new Map<string, () => void>());
 
@@ -124,18 +125,18 @@ export function useBoard() {
   // The local server, when the app is served by it (or proxied in dev), connects on its own.
   useEffect(() => {
     let cancelled = false;
-    void probeLocalServer().then((info) => {
+    const probe = probeLocalServer();
+    const local = probe.then(async (info) => {
       if (info && !cancelled) {
         setServerAvailable(true);
-        void add(new LocalServerSource(info));
+        await add(new LocalServerSource(info));
       }
     });
-    // GitHub repos from last time come back on their own; the git cache makes that cheap.
-    for (const r of rememberedRepos()) {
-      // A gh CLI repo needs the local server; wait for the probe so it does not fail first.
-      if (r.useGhCli) void probeLocalServer().then((info) => { if (info && !cancelled) void add(restoreRepo(r)); });
-      else void add(restoreRepo(r));
-    }
+    const restored = rememberedRepos().map(async (r) => {
+      if (r.useGhCli && !(await probe)) return;
+      if (!cancelled) await add(restoreRepo(r));
+    });
+    void Promise.allSettled([local, ...restored]).then(() => { if (!cancelled) setInitializing(false); });
     const subscriptions = unwatch.current;
     return () => {
       cancelled = true;
@@ -152,5 +153,5 @@ export function useBoard() {
     }));
   }, [workspaces, reload]);
 
-  return { workspaces, add, remove, reload, apply, patch, serverAvailable, clearCacheAndReload };
+  return { workspaces, initializing, add, remove, reload, apply, patch, serverAvailable, clearCacheAndReload };
 }

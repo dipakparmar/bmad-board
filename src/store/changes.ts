@@ -73,7 +73,7 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
           blocked_at: blocked ? today() : undefined,
           blocked_reason: blocked ? change.blockedReason ?? 'blocked from the board' : undefined,
         };
-        if (change.assignee !== undefined) fields.assignee = change.assignee || undefined;
+        if (change.assignee !== undefined) fields.assignee = change.assignee || (leaf.owner ? '' : undefined);
         const existing = await read(path);
         if (existing === null) {
           const ticket = leaf.id ?? leaf.key.slice(leaf.key.indexOf('/') + 1).replace(/\.md$/, '');
@@ -89,11 +89,11 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
         const path = planPath(leaf, tree);
         const existing = await read(path);
         const assignee = change.assignee.trim() || undefined;
-        if (existing !== null) write(path, setFrontmatter(existing, { assignee }));
-        else if (assignee) {
+        if (existing !== null) write(path, setFrontmatter(existing, { assignee: assignee ?? (leaf.owner ? '' : undefined) }));
+        else if (assignee || leaf.owner) {
           const ticket = leaf.id ?? leaf.key.slice(leaf.key.indexOf('/') + 1).replace(/\.md$/, '');
           // No status: an empty one reads as "not started", where `draft` would claim a build began.
-          write(path, setFrontmatter('', { title: leaf.title, ticket, ...(leaf.status ? { status: leaf.status } : {}), assignee }));
+          write(path, setFrontmatter('', { title: leaf.title, ticket, ...(leaf.status ? { status: leaf.status } : {}), assignee: assignee ?? '' }));
         }
         break;
       }

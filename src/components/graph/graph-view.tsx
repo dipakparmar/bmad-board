@@ -1,3 +1,4 @@
+import { TicketTypeIcon } from '@/components/common/ticket-type-icon';
 /**
  * Dependency graph on React Flow, laid out left to right in build order by dagre. Hover a ticket to light
  * up its chain; click to open it. Where the project is writable, drag from a ticket's right edge to
@@ -25,7 +26,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AlertTriangle, Crosshair, Layers, Maximize2, Minimize2, X } from 'lucide-react';
+import { AlertTriangle, Crosshair, Maximize2, Minimize2, X } from 'lucide-react';
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { applyWithToast } from '@/app/actions';
@@ -81,9 +82,9 @@ const TicketCard = memo(function TicketCard({ data }: NodeProps<TicketNode>) {
       <Handle type="target" position={Position.Left} isConnectable={data.editable} className="!size-2 !border-background !bg-muted-foreground/60" />
       <span className="flex items-center gap-1.5">
         <StateIcon state={t.leaf.state} className="size-3.5 shrink-0" />
-        <span className="font-mono text-[11px] text-board-id">{t.ref}</span>
+        <TicketTypeIcon type={t.leaf.type} /><span className="font-mono text-[11px] text-board-id">{t.ref}</span>
         <span className="ml-auto truncate text-[11px] text-muted-foreground">{statusLabel(t.leaf.status)}</span>
-        <Assignee name={t.leaf.plan?.assignee} className="size-4" />
+        <Assignee workspaceId={t.workspaceId} name={t.leaf.plan?.assignee} className="size-4" />
       </span>
       <span className="truncate text-[13px] font-medium">{t.leaf.title}</span>
       <span className="truncate text-[11px] text-muted-foreground">{t.epic?.title ?? (t.leaf.folder === 'backlog' ? 'Backlog' : '')}</span>
@@ -167,7 +168,7 @@ const EpicCard = memo(function EpicCard({ data }: NodeProps<EpicFlowNode>) {
   return (
     <div style={{ width: EW, height: EH }} className={cn('flex cursor-pointer flex-col justify-between rounded-[10px] border border-board-card-border bg-board-card px-3 py-2 shadow-board-card transition-opacity hover:border-board-card-border-hover', data.hot && 'ring-2 ring-primary/40', data.dim && 'opacity-35')}>
       <Handle type="target" position={Position.Left} isConnectable={false} className="!size-2 !border-background !bg-muted-foreground/60" />
-      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Layers className="size-3.5" /><span className="font-mono text-board-id">{data.ref}</span><span className="ml-auto tabular-nums">{done}/{items.length} done</span></span>
+      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><TicketTypeIcon type="epic" /><span className="font-mono text-board-id">{data.ref}</span><span className="ml-auto tabular-nums">{done}/{items.length} done</span></span>
       <span className="truncate text-[13px] font-medium">{data.title}</span>
       <span className="flex items-center gap-2 text-[11px]">
         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-success" style={{ width: `${(done / Math.max(items.length, 1)) * 100}%` }} /></span>

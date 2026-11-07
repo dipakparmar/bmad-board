@@ -29,6 +29,7 @@ import { flag, list, parseFrontmatter, str } from './frontmatter';
 import { DOC_KIND_LABELS, docKind, docLinks, type DocLink } from '../domain/docs';
 import { frontmatterDependencies, proseDependencies, type ProseRef } from '../domain/prose-deps';
 import { joinPath, type FileSource } from './file-source';
+import { loadSprints } from './load-sprints';
 import { loadV6Tree } from './load-v6';
 
 const LEAF_TYPES: readonly string[] = ['story', 'spike', 'bug'];
@@ -151,7 +152,7 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
     if (!LEAF_TYPES.includes(entry.type)) problems.push(`${dir}/tickets.toml: entry ${id} type ${entry.type} is not story, spike or bug`);
     const previousId = [...rows.keys()].at(-1);
     rows.set(String(id), {
-      key: `${folder}/${id}`, id, type: entry.type, title: entry.title, folder, dir, initiative, entry,
+      key: `${folder}/${id}`, id, type: entry.type, title: entry.title, folder, dir, initiative, entry, sprint: str(raw.sprint) || undefined, owner: str(raw.owner) || str(raw.assignee) || undefined,
       hitl: entry.hitl, risk: entry.risk, status: '', state: 'backlog', rawAfter: entry.after, previousId,
       prose: entry.notes?.flatMap((n) => proseDependencies(n)),
     });
@@ -182,6 +183,8 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
     row.fileName = name;
     row.type = str(data.type) as LeafType;
     row.title = str(data.title) || row.title;
+    row.sprint = str(data.sprint) || row.sprint;
+    row.owner = str(data.owner) || str(data.assignee) || row.owner;
     row.file = { path, body, refined: flag(data.refined), severity: (str(data.severity) || undefined) as never };
     row.docs = docLinks({ frontmatter: data, body, references: row.entry?.references }, ctx);
     row.hitl = flag(data.hitl);
@@ -209,7 +212,7 @@ async function loadFolder(src: FileSource, dir: string, folder: string, initiati
     const status = leafStatus(plan.data.status, plan.path, problems);
     row.plan = {
       path: plan.path, ticket: str(ticket), status,
-      assignee: str(plan.data.assignee) || undefined,
+      assignee: 'assignee' in plan.data ? str(plan.data.assignee) || undefined : str(plan.data.owner) || row.owner,
       blockedAt: str(plan.data.blocked_at) || undefined,
       blockedReason: str(plan.data.blocked_reason) || undefined,
       baselineRevision: str(plan.data.baseline_revision) || undefined,
@@ -323,7 +326,7 @@ async function loadInitiative(src: FileSource, dir: string, slug: string, proble
   const ticketsDir = joinPath(dir, 'tickets');
   const breakdown = await readToml(src, joinPath(ticketsDir, 'tickets.toml'), problems);
   const base: Initiative = {
-    type: 'initiative', slug, title: str(file.data.title) || slug, description: '', path: file.path,
+    type: 'initiative', owner: str(file.data.owner) || undefined, slug, title: str(file.data.title) || slug, description: '', path: file.path,
     status: containerStatus(file.data.status), covers: [], after: [], gates: [], risk: (str(file.data.risk) || undefined) as Risk | undefined,
     companions: await companions(src, dir), body: file.body, epics: [], leaves: [],
   };
@@ -383,7 +386,7 @@ async function loadInitiative(src: FileSource, dir: string, slug: string, proble
     const table = listed.find((e) => str(e.slug) === epicSlug) ?? {};
     const data = file?.data ?? {};
     return {
-      type: 'epic', slug: epicSlug, id: toId(table.id) ?? undefined, title: str(data.title) || str(table.title) || epicSlug,
+      type: 'epic', owner: str(data.owner) || str(table.owner) || undefined, slug: epicSlug, id: toId(table.id) ?? undefined, title: str(data.title) || str(table.title) || epicSlug,
       description: str(table.description), path: file?.path ?? joinPath(epicDir, `${epicSlug}.md`), status: containerStatus(data.status),
       covers: list(data.covers ?? table.covers).map(str), after: containerAfter(table.after), gates: gates.get(epicSlug) ?? [],
       // An epic file with no `refined` line, from an older tree, counts as refined.
@@ -435,7 +438,7 @@ export async function loadTicketTree(src: FileSource): Promise<TicketTree> {
   const hasBacklog = entries.some((e) => e.kind === 'dir' && e.name === 'backlog');
   if (initiatives.length === 0 && !hasBacklog) {
     const v6 = await loadV6Tree(src, config.outputFolder);
-    if (v6) return { ...v6, tracker: config.tracker, problems: [...problems, ...v6.problems], board: await readBoardConfig(src, problems) };
+    if (v6) return { ...v6, tracker: config.tracker, problems: [...problems, ...v6.problems], board: await readBoardConfig(src, problems), sprints: await loadSprints(src, config.outputFolder, problems) };
   }
   const backlogRaw = hasBacklog ? await loadFolder(src, backlogDir, 'backlog', '', [], problems) : [];
   const backlog = finish(backlogRaw, resolveAfter(backlogRaw, new Map(), new Set(), problems), new Map());
@@ -443,7 +446,7 @@ export async function loadTicketTree(src: FileSource): Promise<TicketTree> {
   // Active initiative first, as BMAD's `next` reports it.
   initiatives.sort((a, b) => Number(b.slug === config.activeInitiative) - Number(a.slug === config.activeInitiative));
   const board = await readBoardConfig(src, problems);
-  return { projectRoot: '', outputFolder: config.outputFolder, activeInitiative: config.activeInitiative, tracker: config.tracker, initiatives, backlog, layout: 'ticket-tree', problems, board };
+  return { projectRoot: '', outputFolder: config.outputFolder, activeInitiative: config.activeInitiative, tracker: config.tracker, initiatives, backlog, layout: 'ticket-tree', problems, board, sprints: await loadSprints(src, config.outputFolder, problems) };
 }
 
 /**

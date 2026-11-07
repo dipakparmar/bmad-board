@@ -2,9 +2,11 @@
  * Reads a BMAD project straight from a GitHub repo and writes changes as commits on a
  * `bmad-board/…` branch with one pull request per editing session, so every board change gets reviewed.
  */
+import { membersFromGitLog, mergeMembers } from '../../domain/people';
 import type { ChangeAuthor, ChangeResult, Member, StoreCapabilities } from '../../domain';
+import { membersFromGitHubAccounts, type GitHubPeopleCommit } from './github-people';
 import { cacheGet, cacheSet } from '../cache';
-import { changedByOf, joinPath, type Activity, type CommitDetail, type FileEntry, type FileSource, type FileWrite, type RepoLinks } from '../file-source';
+import { coAuthorsOf, changedByOf, joinPath, type Activity, type CommitDetail, type FileEntry, type FileSource, type FileWrite, type RepoLinks } from '../file-source';
 import { readThroughCache, snapshotFromFiles, type Snapshot } from '../snapshot';
 
 export interface GitHubTarget {
@@ -180,7 +182,7 @@ export class GitHubSource implements FileSource {
     const [subject = '', ...rest] = c.commit.message.split('\n');
     const status: Record<string, string> = { added: 'A', removed: 'D', modified: 'M', renamed: 'R', copied: 'C', changed: 'M' };
     const files = (c.files ?? []).filter((f) => f.filename.startsWith(prefix)).map((f) => ({ status: status[f.status] ?? 'M', path: f.filename.slice(prefix.length) }));
-    return { sha: c.sha, author: c.commit.author.name, date: c.commit.author.date, subject, body: rest.join('\n').trim(), changedBy: changedByOf(rest.join('\n')), files, paths: files.map((f) => f.path), url: c.html_url };
+    return { sha: c.sha, author: c.commit.author.name, date: c.commit.author.date, subject, body: rest.join('\n').trim(), changedBy: changedByOf(rest.join('\n')), coAuthors: coAuthorsOf(rest.join('\n')), files, paths: files.map((f) => f.path), url: c.html_url };
   }
 
   async history(path: string, limit = 30): Promise<Activity[]> {
@@ -190,31 +192,37 @@ export class GitHubSource implements FileSource {
     const commits = await this.call<C[]>(this.repoPath(`/commits?sha=${encodeURIComponent(this.ref)}&path=${encodeURIComponent(prefix + joinPath(path))}&per_page=${limit}`));
     return commits.map((c) => {
       const [subject = '', ...rest] = c.commit.message.split('\n');
-      return { sha: c.sha, author: c.commit.author.name, date: c.commit.author.date, subject, changedBy: changedByOf(rest.join('\n')), paths: [], url: c.html_url };
+      return { sha: c.sha, author: c.commit.author.name, date: c.commit.author.date, subject, changedBy: changedByOf(rest.join('\n')), coAuthors: coAuthorsOf(rest.join('\n')), paths: [], url: c.html_url };
     });
   }
 
   /**
    * Contributors (top 100 by commits, one request) plus collaborators when the token may list them.
-   * Cached per repo for six hours in this browser, so a big repo costs two requests a session at most.
+   * Recent authors and co-authors (at most 100 commits) are included. Cached per repo for six hours in this browser, using at most three requests per refresh.
    */
   async people(): Promise<Member[]> {
-    const key = `bmad-board:people:${this.id}`;
+    const key = `bmad-board:people:v5:${this.id}`;
     try {
       const hit = JSON.parse(localStorage.getItem(key) ?? 'null') as { at: number; members: Member[] } | null;
       if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.members;
     } catch { /* storage unavailable */ }
     type U = { login: string; avatar_url: string; type: string; contributions?: number };
-    const [contributors, collaborators] = await Promise.all([
+    type C = GitHubPeopleCommit & { commit: { author: { date: string } } };
+    const [contributors, collaborators, recent] = await Promise.all([
       this.call<U[]>(this.repoPath('/contributors?per_page=100')).catch(() => [] as U[]),
       this.capabilities.write ? this.call<U[]>(this.repoPath('/collaborators?per_page=100')).catch(() => [] as U[]) : Promise.resolve([] as U[]),
+      this.call<C[]>(this.repoPath(`/commits?per_page=100${this.ref ? `&sha=${encodeURIComponent(this.ref)}` : ''}`)).catch(() => [] as C[]),
     ]);
     const seen = new Map<string, Member>();
     for (const u of [...contributors, ...collaborators]) {
       if (seen.has(u.login)) continue;
       seen.set(u.login, { name: u.login, login: u.login, avatarUrl: u.avatar_url, agent: u.type === 'Bot' || /\[bot\]$/.test(u.login), commits: u.contributions ?? 0, sources: ['github'] });
     }
-    const members = [...seen.values()];
+    const git = membersFromGitLog(recent.map((c) => ({
+      ...c.commit.author, committerName: c.commit.committer?.name, committerEmail: c.commit.committer?.email, changedBy: changedByOf(c.commit.message),
+      coAuthors: [...c.commit.message.matchAll(/^Co-authored-by:[ \t]*(.+)$/gim)].map((m) => m[1]).join('\n'),
+    })));
+    const members = mergeMembers([...seen.values()], git, membersFromGitHubAccounts(recent));
     try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), members })); } catch { /* storage unavailable */ }
     return members;
   }

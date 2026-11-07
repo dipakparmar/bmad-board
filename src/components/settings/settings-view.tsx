@@ -19,6 +19,7 @@ import { loadAuthor } from '@/app/use-board';
 import type { GitPreferences } from '@/app/preferences';
 import { cn } from '@/lib/cn';
 import { TaskCardBody } from '../board/task-card';
+import { UsersSettings } from './users-settings';
 import { ShortcutsList } from '../dialogs/shortcuts-dialog';
 
 function Card({ title, description, children, footer }: { title: string; description?: ReactNode; children: ReactNode; footer?: ReactNode }) {
@@ -314,6 +315,7 @@ export function SettingsView() {
         <h2 className="text-lg font-semibold">Settings</h2>
         <p className="text-sm text-muted-foreground">Your settings stay in this browser. Project settings are committed to the repo for everyone.</p>
       </div>
+      <UsersSettings />
       <YouSettings />
       <ProjectSettings />
       <CacheSettings />

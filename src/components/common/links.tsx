@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import { useBoardContext } from '@/app/board-context';
 import { branchHref, commitTarget, fileTarget, type RefResolver } from '@/app/links';
 import type { Ticket } from '@/app/view-model';
-import { docKind } from '@/domain';
+import { referencedTicket } from '@/app/reference-titles';
+import { docKind, normalisePath, type DocLink } from '@/domain';
 import { cn } from '@/lib/cn';
 
 export function useRepoLinks(workspaceId: string) {
@@ -58,11 +59,11 @@ export function CommitLink({ workspaceId, sha, className, children }: { workspac
   return <button type="button" className={cls} title={`Commit ${sha}: what it changed`} onClick={(e) => { e.stopPropagation(); openCommit(workspaceId, sha); }}>{body}</button>;
 }
 
-export function BranchLink({ workspaceId, branch, className }: { workspaceId: string; branch: string; className?: string }) {
+export function BranchLink({ workspaceId, branch, className, wrap = false }: { workspaceId: string; branch: string; className?: string; wrap?: boolean }) {
   const { preferences } = useBoardContext();
   const { links } = useRepoLinks(workspaceId);
   const href = preferences.prefs.links.branches === 'github' ? branchHref(links, branch) : undefined;
-  const body = <><GitBranch className="size-3 shrink-0" /><span className="truncate">{branch}</span></>;
+  const body = <><GitBranch className="size-3 shrink-0" /><span className={wrap ? 'min-w-0 whitespace-normal break-all text-left' : 'truncate'}>{branch}</span></>;
   const cls = cn('inline-flex min-w-0 items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground', className);
   if (href) return <Anchor href={href} className={cls} title={`Open ${branch} on GitHub`}>{body}</Anchor>;
   return (
@@ -77,14 +78,14 @@ export function BranchLink({ workspaceId, branch, className }: { workspaceId: st
  * resolver for `linkifyRefs`, and what clicking each link does.
  */
 export function useTicketRefs(ticket: Ticket) {
-  const { tickets, select, openCommit, preferences } = useBoardContext();
+  const { tickets, select, openCommit, preferences, openDoc } = useBoardContext();
   const want = preferences.prefs.links.commits;
   const openFile = useOpenFile();
   const { canShowCommits, links } = useRepoLinks(ticket.workspaceId);
   return useMemo(() => {
     const peers = tickets.filter((t) => t.workspaceId === ticket.workspaceId);
     const sameInit = (t: Ticket) => t.initiative?.slug === ticket.initiative?.slug;
-    const byRef = (ref: string) => peers.find((t) => t.ref === ref && sameInit(t)) ?? peers.find((t) => t.ref === ref);
+    const byRef = (ref: string) => referencedTicket(ref, ticket, peers);
     const byName = (name: string) => peers.find((t) => t.leaf.file?.path.endsWith(`/${name}.md`) && sameInit(t)) ?? peers.find((t) => t.leaf.file?.path.endsWith(`/${name}.md`));
     const epicByName = (name: string) => (peers.find((t) => t.epic?.slug === name && sameInit(t)) ?? peers.find((t) => t.epic?.slug === name))?.epic;
     const resolver: RefResolver = {
@@ -105,6 +106,27 @@ export function useTicketRefs(ticket: Ticket) {
         else openCommit(ticket.workspaceId, value);
       }
     };
-    return { resolver, onRef };
-  }, [tickets, ticket, select, openCommit, openFile, canShowCommits, links, want]);
+    const describeRef = (kind: string, value: string) => {
+      const target = kind === 'ticket' ? byRef(value) : kind === 'name' ? byName(value) : undefined;
+      if (target) return { title: target.leaf.title, ref: target.ref, type: target.leaf.type };
+      const epic = kind === 'name' ? epicByName(value) : undefined;
+      return epic ? { title: epic.title, type: 'epic' as const } : undefined;
+    };
+    const docLink = (href: string): DocLink => {
+      const [raw = '', anchor] = href.split('#');
+      let decoded = raw;
+      try { decoded = decodeURIComponent(raw); } catch { /* preserve malformed percent escapes as literal path text */ }
+      const path = decoded.replace(/^\{project-root\}\//, '');
+      const base = ticket.leaf.file?.path ?? ticket.leaf.plan?.path ?? '';
+      const relative = normalisePath(`${base.slice(0, base.lastIndexOf('/'))}/${path}`);
+      const rooted = normalisePath(path);
+      return { candidates: [...new Set(path.startsWith('_bmad') || path.startsWith('docs/') ? [rooted, relative] : [relative, rooted])], anchor, label: 'document', kind: docKind(path) };
+    };
+    return { resolver, onRef, describeRef, docLink, workspaceId: ticket.workspaceId, onDocLink: (href: string) => {
+      const link = docLink(href);
+      const target = peers.find((t) => t.leaf.file?.path && link.candidates.includes(t.leaf.file.path));
+      if (target) select(target.uid);
+      else openDoc(ticket.workspaceId, link);
+    } };
+  }, [tickets, ticket, select, openCommit, openFile, canShowCommits, links, want, openDoc]);
 }

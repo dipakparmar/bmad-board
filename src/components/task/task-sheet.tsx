@@ -1,4 +1,6 @@
 /** The ticket sheet, laid out like Kaneo's task-details-sheet: content on the left, properties rail on the right. */
+import { ReferenceText } from '../common/reference-text';
+import { TicketReferenceChip, DocumentReferenceLabel } from '../common/reference-chip';
 import { ArrowLeft, ArrowUpRight, Copy, FileText, Link2, Maximize2, Minimize2, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import type { ReactNode } from 'react';
@@ -14,7 +16,7 @@ import { ActivityList, useHistory } from '../next/activity-feed';
 import { copyHandoff, ticketHandoffs } from '../next/handoff-menu';
 import { Markdown } from './markdown';
 import { KindBadge } from '../docs/docs-view';
-import { DOC_KIND_LABELS, docTitleFromPath, type DocLink } from '@/domain';
+import { DOC_KIND_LABELS, type DocLink } from '@/domain';
 import { PropertiesRail } from './properties-rail';
 import { BranchLink, FileLink, useTicketRefs } from '../common/links';
 import { Breadcrumbs, useScopeCrumbs } from '../layout/breadcrumbs';
@@ -138,7 +140,7 @@ function LinkedDocs({ ticket: t }: { ticket: Ticket }) {
                 return (
                   <button key={`${path}#${d.anchor ?? ''}`} type="button" title={`${path}${d.anchor ? `#${d.anchor}` : ''}`} onClick={() => openDoc(t.workspaceId, d)} className="flex max-w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent">
                     <KindBadge kind={d.kind} />
-                    <span className="truncate">{d.title ?? `${docTitleFromPath(path)}${d.anchor ? ` § ${d.anchor}` : ''}`}</span>
+                    <DocumentReferenceLabel workspaceId={t.workspaceId} link={d} />
                     {d.label && !d.title && !['source', 'companion', 'reference', 'file', 'document', DOC_KIND_LABELS[d.kind].toLowerCase()].includes(d.label) && <span className="text-muted-foreground">· {d.label}</span>}
                   </button>
                 );
@@ -164,7 +166,7 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
           </div>
           <TicketTitle full={full} className={cn('font-semibold', full ? 'text-2xl leading-8' : 'text-xl leading-7')}>{t.leaf.title}</TicketTitle>
           {t.readiness === 'blocked' && (t.blockedReason || t.waitingOn.length > 0) && (
-            <p className="mt-2 text-sm text-destructive">{t.blockedReason ?? `Waiting on ${t.waitingOn.map((k) => refOf(k, peers)).join(', ')}`}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-destructive">{t.blockedReason ? <ReferenceText text={t.blockedReason} ticket={t} /> : <>Waiting on {t.waitingOn.map((key) => { const target = peers.find((peer) => peer.leaf.key === key); return target ? <TicketReferenceChip key={key} ticket={target} /> : <span key={key}>{refOf(key, peers)}</span>; })}</>}</div>
           )}
           <PropertiesRail ticket={t} className="-mx-5 mt-4 border-border border-y lg:hidden" />
           <div className="mt-6"><TaskDescription ticket={t} /></div>
@@ -173,7 +175,7 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
           <Relations ticket={t} />
           {t.leaf.plan?.body.trim() && (
             <Section title="Build plan">
-              <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Assignee name={t.leaf.plan.assignee} />{t.leaf.plan.assignee ?? 'No assignee'} · {t.leaf.plan.path.split('/').pop()}</div>
+              <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Assignee workspaceId={t.workspaceId} name={t.leaf.plan.assignee} />{t.leaf.plan.assignee ?? 'No assignee'} · {t.leaf.plan.path.split('/').pop()}</div>
               <PlanBody ticket={t} />
             </Section>
           )}
@@ -211,19 +213,21 @@ export function TicketHeader({ ticket: t, full }: { ticket: Ticket; full?: boole
   const scopeCrumbs = useScopeCrumbs();
   const branch = board.workspaces.find((w) => w.store.id === t.workspaceId)?.store.links()?.branch;
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-border border-b px-4">
-      {full && <Button size="sm" variant="ghost" onClick={() => setExpanded(false)}><ArrowLeft />Back</Button>}
-      <Breadcrumbs size="xs" items={[
-        ...scopeCrumbs({ workspaceId: t.workspaceId, initiative: t.initiative?.slug, epic: t.leaf.folder === 'backlog' ? 'backlog' : t.epic?.slug }),
-        { label: t.ref, title: full ? `${t.ref}: ${t.leaf.title}` : `Open ${t.ref} full screen`, className: 'font-mono', go: () => setExpanded(true) },
-      ]} />
-      {branch && <BranchLink workspaceId={t.workspaceId} branch={branch} className="max-w-48" />}
-      <div className="ml-auto flex items-center gap-1">
-        <Button size="icon-sm" variant="ghost" aria-label="Copy link" title="Copy link to this ticket" onClick={() => { void navigator.clipboard?.writeText(location.href); toast.success('Link copied'); }}><Link2 /></Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Copy BMAD ref" title="Copy BMAD ref" onClick={() => { void navigator.clipboard?.writeText(t.ref); toast.success(`Copied ${t.ref}`, { description: `Hand it to an agent, for example "build story ${t.ref}".` }); }}><Copy /></Button>
-        <Button size="icon-sm" variant="ghost" aria-label={full ? 'Open as panel' : 'Open full screen'} title={full ? 'Open as panel' : 'Open full screen'} onClick={() => setExpanded(!full)}>{full ? <Minimize2 /> : <Maximize2 />}</Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={() => select(null)}><X /></Button>
+    <header className="flex shrink-0 flex-col gap-1.5 border-border border-b px-4 py-2">
+      <div className="flex min-w-0 items-start gap-2">
+        {full && <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setExpanded(false)}><ArrowLeft />Back</Button>}
+        <Breadcrumbs className="min-w-0 flex-1 self-center" size="xs" items={[
+          ...scopeCrumbs({ workspaceId: t.workspaceId, initiative: t.initiative?.slug, epic: t.leaf.folder === 'backlog' ? 'backlog' : t.epic?.slug }),
+          { label: t.ref, title: full ? `${t.ref}: ${t.leaf.title}` : `Open ${t.ref} full screen`, className: 'font-mono whitespace-nowrap', go: () => setExpanded(true) },
+        ]} />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button size="icon-sm" variant="ghost" aria-label="Copy link" title="Copy link to this ticket" onClick={() => { void navigator.clipboard?.writeText(location.href); toast.success('Link copied'); }}><Link2 /></Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Copy BMAD ref" title="Copy BMAD ref" onClick={() => { void navigator.clipboard?.writeText(t.ref); toast.success(`Copied ${t.ref}`, { description: `Hand it to an agent, for example "build story ${t.ref}".` }); }}><Copy /></Button>
+          <Button size="icon-sm" variant="ghost" aria-label={full ? 'Open as panel' : 'Open full screen'} title={full ? 'Open as panel' : 'Open full screen'} onClick={() => setExpanded(!full)}>{full ? <Minimize2 /> : <Maximize2 />}</Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={() => select(null)}><X /></Button>
+        </div>
       </div>
+      {branch && <BranchLink workspaceId={t.workspaceId} branch={branch} wrap className="max-w-full px-1 text-[10px]" />}
     </header>
   );
 }

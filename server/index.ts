@@ -1,3 +1,4 @@
+import { changedByOf, coAuthorsOf } from '../src/store/file-source';
 /**
  * bmad-board local server: serves the built app and a small file + git API over one BMAD project folder.
  *
@@ -79,7 +80,7 @@ async function show(sha: string) {
   const branches = await git(['branch', '--all', '--contains', full, '--format=%(refname:short)']);
   return {
     sha: full, author, email, date, subject, body: body.trim(),
-    changedBy: /^Changed-by:\s*(\S+)/m.exec(body)?.[1],
+    changedBy: changedByOf(body), coAuthors: coAuthorsOf(body),
     files: files.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
       const [status = '', ...paths] = l.split('\t');
       return { status: status[0] ?? 'M', path: paths.at(-1) ?? '' };
@@ -94,17 +95,17 @@ async function show(sha: string) {
  */
 const PEOPLE_COMMITS = Number(process.env.BMAD_BOARD_PEOPLE_COMMITS ?? 5000);
 const PEOPLE_DAYS = Number(process.env.BMAD_BOARD_PEOPLE_DAYS ?? 365);
-let peopleCache: { head: string; lines: { name: string; email: string; date: string; changedBy?: string }[] } | null = null;
+let peopleCache: { head: string; lines: { sha?: string; name: string; email: string; date: string; changedBy?: string; coAuthors?: string; committerName?: string; committerEmail?: string }[] } | null = null;
 
 async function people() {
   if (!(await isRepo())) return { lines: [], window: null };
   const head = (await git(['rev-parse', 'HEAD'])).out;
   if (peopleCache?.head !== head) {
-    const log = await git(['log', `-n${PEOPLE_COMMITS}`, `--since=${PEOPLE_DAYS}.days`, '--format=%an%x1f%ae%x1f%aI%x1f%(trailers:key=Changed-by,valueonly,separator=%x2C)%x1e']);
+    const log = await git(['log', `-n${PEOPLE_COMMITS}`, `--since=${PEOPLE_DAYS}.days`, '--format=%an%x1f%ae%x1f%aI%x1f%(trailers:key=Changed-by,valueonly,separator=%x2C)%x1f%(trailers:key=Co-authored-by,valueonly,separator=%x0A)%x1f%cn%x1f%ce%x1f%H%x1e']);
     const lines = log.ok
       ? log.out.split('\x1e').map((l) => l.trim()).filter(Boolean).map((l) => {
-          const [name = '', email = '', date = '', changedBy = ''] = l.split('\x1f');
-          return { name, email, date, changedBy: changedBy.trim() || undefined };
+          const [name = '', email = '', date = '', changedBy = '', coAuthors = '', committerName = '', committerEmail = '', sha = ''] = l.split('\x1f');
+          return { name, email, date, changedBy: changedBy.trim() || undefined, coAuthors: coAuthors.trim() || undefined, committerName, committerEmail, sha };
         })
       : [];
     peopleCache = { head, lines };
@@ -236,7 +237,7 @@ async function history(path: string, limit: number) {
     const [sha = '', author = '', date = '', subject = '', body = '', files = ''] = chunk.split('\x1f');
     return {
       sha, author, date, subject,
-      changedBy: /^Changed-by:\s*(\S+)/m.exec(body)?.[1],
+      changedBy: changedByOf(body), coAuthors: coAuthorsOf(body),
       paths: files.split('\n').map((f) => f.trim()).filter(Boolean),
     };
   });
@@ -251,7 +252,7 @@ async function history(path: string, limit: number) {
 const TREE_LIMIT = 20_000;
 
 async function bmadPrefixes(): Promise<string[]> {
-  const found = new Set(['_bmad', '_bmad-output', 'docs']);
+  const found = new Set(['_bmad', '_bmad-output', '_super-bmad/followup/board-config.yaml', 'docs']);
   for (const cfg of ['_bmad/config.toml', '_bmad/custom/config.toml', '_bmad/custom/config.user.toml', '_bmad/bmm/config.yaml', '_bmad/core/config.yaml']) {
     const text = await readFile(inside(root, cfg), 'utf8').catch(() => '');
     for (const m of text.matchAll(/^\s*(?:output_folder|planning_artifacts|implementation_artifacts|project_knowledge)\s*[:=]\s*["']?([^"'\n#]+?)["']?\s*(?:#.*)?$/gm)) {
@@ -298,6 +299,12 @@ async function tree() {
   // Not a git repository: modified time and size stand in for content.
   let count = 0;
   const walk = async (dir: string): Promise<boolean> => {
+    const direct = await stat(join(root, dir)).catch(() => null);
+    if (direct?.isFile()) {
+      if (++count > TREE_LIMIT) return false;
+      files.set(dir, `fs:${dir}:${Math.round(direct.mtimeMs)}:${direct.size}`);
+      return true;
+    }
     const entries = await readdir(join(root, dir), { withFileTypes: true }).catch(() => []);
     for (const e of entries) {
       const rel = dir ? `${dir}/${e.name}` : e.name;

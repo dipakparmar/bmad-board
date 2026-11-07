@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { cn } from '@/lib/cn';
+import { SprintSelector } from './sprint-selector';
 import { ActiveFilters, FilterMenu } from './filter-bar';
 import { Breadcrumbs, useGoToScope, useScopeCrumbs, type Crumb } from './breadcrumbs';
 
@@ -18,7 +19,7 @@ const VIEWS: { id: View; label: string; icon: typeof List }[] = [
 ];
 
 export function Header() {
-  const { scope, board, view, setView, search, setSearch, setDialog, inScope, mineOnly, setMineOnly } = useBoardContext();
+  const { scope, board, view, setView, search, setSearch, setDialog, inScope, mineOnly, setMineOnly, loadState } = useBoardContext();
   const { theme, toggle } = useTheme();
   const go = useGoToScope();
   const scopeCrumbs = useScopeCrumbs();
@@ -29,13 +30,13 @@ export function Header() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 items-center gap-1.5">
           <Breadcrumbs items={crumbs} />
-          <span className="text-xs tabular-nums text-muted-foreground">{inScope.length}</span>
+          <span className="text-xs tabular-nums text-muted-foreground">{loadState.initial ? 'Loading…' : loadState.busy ? `${inScope.length} loaded` : inScope.length}</span>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <Button size="sm" variant="outline" onClick={() => setDialog('search')} className="text-muted-foreground"><Search />Search<Kbd className="ml-1">⌘K</Kbd></Button>
           <Button size="icon-sm" variant="ghost" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}><Keyboard /></Button>
           <Button size="icon-sm" variant="ghost" aria-label="Toggle theme" onClick={toggle}>{theme === 'dark' ? <Sun /> : <Moon />}</Button>
-          <Button size="sm" onClick={() => setDialog('new-ticket')}><Plus />New ticket</Button>
+          <Button size="sm" disabled={!loadState.hasLoaded} onClick={() => setDialog('new-ticket')}><Plus />New ticket</Button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -47,6 +48,7 @@ export function Header() {
           ))}
         </div>
         <Button size="sm" variant={mineOnly ? 'secondary' : 'ghost'} className={cn('ml-auto', mineOnly ? '' : 'text-muted-foreground')} aria-pressed={mineOnly} title="Only tickets assigned to you (m)" onClick={() => setMineOnly((v) => !v)}><UserRound />Mine</Button>
+        <SprintSelector />
         <FilterMenu />
         <Input size="sm" className="w-56" placeholder="Find in titles" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>

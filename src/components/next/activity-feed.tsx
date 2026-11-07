@@ -2,7 +2,9 @@
 import { Bot, GitCommit, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useBoardContext } from '@/app/board-context';
+import { parseChangedBy } from '@/domain';
 import type { Activity } from '@/store';
+import { Assignee } from '../board/chips';
 import { CommitLink } from '../common/links';
 
 function ago(iso: string): string {
@@ -14,23 +16,23 @@ function ago(iso: string): string {
 }
 
 export function actorOf(a: Activity): { name: string; agent: boolean } {
-  if (a.changedBy) {
-    const [kind, ...name] = a.changedBy.split(':');
-    return { name: name.join(':') || a.author, agent: kind === 'agent' };
-  }
-  return { name: a.author, agent: /agent|claude|bot|\[bot\]/i.test(a.author) };
+  const changed = a.changedBy ? parseChangedBy(a.changedBy) : null;
+  if (changed) return changed;
+  return { name: a.author, agent: /agent|claude|codex|copilot|bot|\[bot\]/i.test(a.author) };
 }
 
 export function ActivityList({ items, workspaceId, empty = 'No commits yet.' }: { items: Activity[]; workspaceId?: string; empty?: string }) {
+  const { resolvePerson } = useBoardContext();
   if (items.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
   return (
     <ol className="flex flex-col gap-3">
       {items.map((a) => {
-        const actor = actorOf(a);
+        const raw = actorOf(a);
+        const actor = workspaceId ? resolvePerson(workspaceId, raw.name) ?? raw : raw;
         const Icon = actor.agent ? Bot : a.changedBy ? UserRound : GitCommit;
         return (
           <li key={a.sha} className="flex gap-2.5 text-xs">
-            <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <>{workspaceId ? <Assignee workspaceId={workspaceId} name={actor.name} className="mt-0.5 size-5" /> : <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}</>
             <div className="min-w-0">
               {workspaceId ? <CommitLink workspaceId={workspaceId} sha={a.sha} className="block w-full truncate text-left text-foreground/90">{a.subject}</CommitLink> : <div className="truncate text-foreground/90">{a.subject}</div>}
               <div className="text-muted-foreground">
