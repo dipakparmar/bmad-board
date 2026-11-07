@@ -177,3 +177,14 @@ export function standupNotes<T extends { leaf: Leaf }>(s: Standup<T>, refOf: (t:
   if (notes?.team.trim()) out.push('', '## Team notes', notes.team.trim());
   return out.join('\n');
 }
+
+/** Clipboard output contains authored notes only. The saved stand-up report can retain its work summary. */
+export function standupNotesOnly(since: Date, members: { id: string; name: string }[], notes: StandupNotes): string {
+  const names = new Map(members.map((member) => [member.id, member.name]));
+  const entries = Object.entries(notes.members).filter(([, note]) => note.trim());
+  if (!entries.length && !notes.team.trim()) return '';
+  const out = [`## Stand-up notes · since ${since.toDateString()}`];
+  for (const [id, note] of entries) out.push('', `### ${names.get(id) ?? id}`, note.trim());
+  if (notes.team.trim()) out.push('', '## Team notes', notes.team.trim());
+  return out.join('\n');
+}

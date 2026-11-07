@@ -47,8 +47,8 @@ export function Header() {
             </button>
           ))}
         </div>
-        <Button size="sm" variant={mineOnly ? 'secondary' : 'ghost'} className={cn('ml-auto', mineOnly ? '' : 'text-muted-foreground')} aria-pressed={mineOnly} title="Only tickets assigned to you (m)" onClick={() => setMineOnly((v) => !v)}><UserRound />Mine</Button>
-        <SprintSelector />
+        {view !== 'standup' && <Button size="sm" variant={mineOnly ? 'secondary' : 'ghost'} className={cn('ml-auto', mineOnly ? '' : 'text-muted-foreground')} aria-pressed={mineOnly} title="Only tickets assigned to you (m)" onClick={() => setMineOnly((v) => !v)}><UserRound />Mine</Button>}
+        <div className={view === 'standup' ? 'ml-auto' : undefined}><SprintSelector /></div>
         <FilterMenu />
         <Input size="sm" className="w-56" placeholder="Find in titles" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>

@@ -159,12 +159,12 @@ function useBoardState() {
       (!scope.workspaceId || t.workspaceId === scope.workspaceId) &&
       (!scope.initiative || t.initiative?.slug === scope.initiative) &&
       (!scope.epic || (scope.epic === 'backlog' ? t.leaf.folder === 'backlog' : t.epic?.slug === scope.epic)) &&
-      (!mineOnly || (!!me && t.leaf.plan?.assignee?.trim().toLowerCase() === (resolvePerson(t.workspaceId, me)?.name.toLowerCase() ?? me))) &&
+      (view === 'standup' || !mineOnly || (!!me && t.leaf.plan?.assignee?.trim().toLowerCase() === (resolvePerson(t.workspaceId, me)?.name.toLowerCase() ?? me))) &&
       matchesSprint(t.leaf.sprint, filters.sprint, board.workspaces.find((w) => w.store.id === t.workspaceId)?.tree?.sprints ?? []) &&
       matches(t, { ...filters, who: filters.who.map((name) => resolvePerson(t.workspaceId, name)?.name.toLowerCase() ?? name) }, (name) => resolvePerson(t.workspaceId, name)?.agent ?? ((people[t.workspaceId] ?? []).find((m) => m.name.toLowerCase() === name.toLowerCase())?.agent || agentCheck(name))) &&
       (!q || `${t.ref} ${t.leaf.title} ${t.leaf.plan?.assignee ?? ''} ${t.epic?.title ?? ''} ${t.leaf.type}`.toLowerCase().includes(q)),
     );
-  }, [tickets, scope, search, mineOnly, me, filters, agentCheck, resolvePerson, people, board.workspaces]);
+  }, [tickets, scope, search, mineOnly, view, me, filters, agentCheck, resolvePerson, people, board.workspaces]);
   const loadState = workspaceLoadState(board.workspaces, scope.workspaceId, board.initializing);
   const selected: Ticket | null = tickets.find((t) => t.uid === selectedUid) ?? null;
   const [expanded, setExpanded] = useState(false);

@@ -1,7 +1,7 @@
 import { createPersonResolver, resolveMembers } from './identities';
 import { membersFromGitLog, mergeMembers } from './people';
 import { describe, expect, test } from 'bun:test';
-import { lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesPath, type StandupCommit } from './standup';
+import { lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesOnly, standupNotesPath, type StandupCommit } from './standup';
 import type { Leaf } from './ticket-tree';
 import type { LeafStatus } from './status';
 import { boardState } from './status';
@@ -110,4 +110,26 @@ test('canonical roster resolution preserves project-hidden users without a brows
   const resolve = createPersonResolver(resolveMembers(membersFromGitLog([{ name: 'CI User', email: 'ci@test', date: '2026-11-07' }]), []), []);
   const report = standup([], [commit('ci', 'CI User', '2026-11-07')], new Date(0), { wipLimits: {}, agents: [], hidden: ['CI User'] }, resolve);
   expect(report.members).toHaveLength(0);
+});
+
+
+test('Copy notes includes written notes without generated tickets or commit details', () => {
+  const report = standup([ticket(1, 'in-progress', 'Dipak'), ticket(2, 'built', 'Priya')], [commit('abc', 'Dipak', '2026-11-07')], new Date(2026, 10, 7));
+  const notes = { members: { dipak: 'Pair with Priya on 1.3.\nAsk finance about regions.', priya: ' ' }, team: 'Demo on Friday.' };
+  const text = standupNotesOnly(report.since, report.members, notes);
+  expect(text).toContain('### Dipak');
+  expect(text).toContain(notes.members.dipak);
+  expect(text).toContain('## Team notes\nDemo on Friday.');
+  expect(text).not.toContain('Story 1');
+  expect(text).not.toContain('Story 2');
+  expect(text).not.toContain('commit abc');
+  expect(text).not.toContain('### Priya');
+  expect(text).not.toContain('**Doing:**');
+});
+test('empty notes do not produce a generated stand-up summary on the clipboard', () => {
+  expect(standupNotesOnly(new Date(), [{ id: 'dipak', name: 'Dipak' }], { members: { dipak: ' ' }, team: '' })).toBe('');
+});
+test('written notes for people outside the current ticket filters are still copied', () => {
+  const text = standupNotesOnly(new Date(2026, 10, 7), [{ id: 'profile-sam', name: 'Sam' }], { members: { 'profile-sam': 'Follow up tomorrow.' }, team: '' });
+  expect(text).toContain('### Sam\nFollow up tomorrow.');
 });

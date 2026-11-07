@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { applyWithToast, setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import type { Ticket } from '@/app/view-model';
-import { LEAF_STATUSES, lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesPath, statusLabel, STATUS_LABELS, type LeafStatus, type SprintInfo, type StandupCommit, type StandupMember, type StandupNotes } from '@/domain';
+import { LEAF_STATUSES, lastWorkingDay, parseStandupNotes, standup, standupNotes, standupNotesOnly, standupNotesPath, statusLabel, STATUS_LABELS, type LeafStatus, type SprintInfo, type StandupCommit, type StandupMember, type StandupNotes } from '@/domain';
 import { Button } from '@/components/ui/button';
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -235,9 +235,16 @@ export function StandupView() {
     }
   };
 
+  const hasNotes = !!notes.team.trim() || Object.values(notes.members).some((note) => !!note.trim());
   const copyNotes = async () => {
     try {
-      await navigator.clipboard.writeText(standupNotes(report, (t) => t.ref, notes));
+      const roster = ws ? (state.people[ws.store.id] ?? []).flatMap((member) => {
+        const person = resolvePerson(ws.store.id, member.name);
+        return person ? [{ id: person.id, name: person.name }] : [];
+      }) : [];
+      const text = standupNotesOnly(report.since, [...roster, ...members], notes);
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
       toast.success('Stand-up notes copied');
     } catch {
       toast.error('Could not copy to the clipboard');
@@ -261,7 +268,7 @@ export function StandupView() {
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {notesPath && <span className="text-xs text-muted-foreground" title={notesPath}>{dirty ? 'Unsaved notes' : savedNotes ? 'Notes saved' : ''}</span>}
           {canSave && <Button size="sm" variant="outline" disabled={!dirty} onClick={() => void saveNotes()}><Save />Save notes</Button>}
-          <Button size="sm" variant="outline" onClick={() => void copyNotes()}><ClipboardCopy />Copy notes</Button>
+          <Button size="sm" variant="outline" disabled={!hasNotes} title={hasNotes ? 'Copy written notes only' : 'Add notes to copy'} onClick={() => void copyNotes()}><ClipboardCopy />Copy notes</Button>
           {running
             ? <Button size="sm" variant="outline" onClick={() => setTurn(null)}><Square />End stand-up</Button>
             : <Button size="sm" disabled={members.length === 0} onClick={() => setTurn(0)}><Play />Run stand-up</Button>}

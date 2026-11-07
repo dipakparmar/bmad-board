@@ -54,7 +54,7 @@ export function useShortcuts(state: BoardState, onHelp: () => void) {
       else if (k === '?') { onHelp(); e.preventDefault(); }
       else if (k === '[') s.preferences.update((p) => ({ sidebarOpen: !p.sidebarOpen }));
       else if (k === 'c') { s.setDialog('new-ticket'); e.preventDefault(); }
-      else if (k === 'm') s.setMineOnly((v) => !v);
+      else if (k === 'm' && s.view !== 'standup') s.setMineOnly((v) => !v);
       else if (k === 'f' && s.selected) s.setExpanded(true);
       else if (k === '/') { document.querySelector<HTMLInputElement>('input[placeholder="Find in titles"]')?.focus(); e.preventDefault(); }
       else if (k === 'x') { document.querySelector<HTMLElement>('[data-filter-trigger]')?.click(); e.preventDefault(); }
