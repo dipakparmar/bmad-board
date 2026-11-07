@@ -10,7 +10,7 @@ bun install
 bun run start -- --root ~/code/my-project
 ```
 
-Open <http://127.0.0.1:33714>. The project needs BMAD's ticket tree (`_bmad-output/initiative-*/…`). A v6 project opens read-only until you run `bmad migrate method` in it.
+Open <http://127.0.0.1:33714>. The project needs BMAD's ticket tree (`_bmad-output/initiative-*/…`). A v6 project (`sprint-status.yaml` and `epics.md`) works too, and edits are written in v6's own format.
 
 No local checkout? Use **GitHub repo** in the header instead. Changes then land on a `bmad-board/…` branch with one pull request per session.
 

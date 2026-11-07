@@ -42,9 +42,13 @@ export function TaskDescription({ ticket }: { ticket: Ticket }) {
   }
 
   const shown = bodyOf(leaf);
+  // Checkboxes in the ticket's own file (a v6 story's tasks, say) can be ticked where they show.
+  const onTask = ticket.readOnly || !leaf.file ? undefined : (index: number, checked: boolean) => {
+    void applyWithToast(state, ticket.workspaceId, [{ kind: 'toggle-task', key: leaf.key, index, checked, inFile: true }], `${checked ? 'Ticked' : 'Unticked'} a task on ${ticket.ref}`);
+  };
   return (
     <div className="group relative">
-      {shown ? <Markdown source={shown} refs={refs} /> : <p className="text-sm text-muted-foreground">No description yet.</p>}
+      {shown ? <Markdown source={shown} refs={refs} onTask={onTask} /> : <p className="text-sm text-muted-foreground">No description yet.</p>}
       {!ticket.readOnly && (
         <Button size="xs" variant="ghost" className="absolute -top-1 right-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" onClick={() => setDraft(source)}>
           <Pencil />Edit

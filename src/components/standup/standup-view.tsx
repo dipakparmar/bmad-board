@@ -219,7 +219,7 @@ export function StandupView() {
   };
   const noteFor = (id: string) => notes.members[id] ?? '';
   const setNoteFor = (id: string) => (v: string) => updateNotes({ ...notes, members: { ...notes.members, [id]: v } });
-  const canSave = !!ws && !!notesPath && ws.store.capabilities.write && ws.tree?.layout !== 'v6';
+  const canSave = !!ws && !!notesPath && ws.store.capabilities.write;
   const saveNotes = async () => {
     if (!ws || !notesPath) return;
     const text = `# Stand-up ${notesPath.split('standup-').pop()?.replace(/\.md$/, '')}\n\n${standupNotes(report, (t) => t.ref, notes)}`;

@@ -170,7 +170,7 @@ function ProjectSettings() {
     setHidden(saved.hidden.join('\n'));
   }, [saved]);
   if (!ws) return null;
-  const writable = ws.store.capabilities.write && ws.tree?.layout !== 'v6' && ws.tree?.tracker === 'repo';
+  const writable = ws.store.capabilities.write && ws.tree?.tracker === 'repo';
   const next: BoardConfig = { ...draft, agents: lines(agents), hidden: lines(hidden) };
   const dirty = JSON.stringify(next) !== JSON.stringify(saved);
   const limit = (k: keyof BoardConfig['wipLimits'], v: string) => {

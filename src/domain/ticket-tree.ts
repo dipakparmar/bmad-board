@@ -118,8 +118,23 @@ export interface Leaf {
   state: BoardState;
   /** Docs it links to: PRD, architecture, UX, plans… from front matter, references and links. */
   docs?: DocLink[];
+  /** Where a v6 story lives: its sprint-status key, epics file and story file. */
+  v6?: V6Ref;
   /** Entry and file disagree on `after` or `hitl`. */
   drift?: { after?: { file: TicketKey[]; entry: TicketKey[] }; hitl?: { file: boolean; entry: boolean } };
+}
+
+export interface V6Ref {
+  /** `N-M-slug` in sprint-status.yaml (the key it has, or the one sprint-planning would give it). */
+  sprintKey: string;
+  epic: number;
+  story: string;
+  /** Whether sprint-status.yaml lists it yet. */
+  inSprint: boolean;
+  /** The epics file (or shard) that plans it, when it does. */
+  epicsPath?: string;
+  /** Where its story file goes once created. */
+  storyDir: string;
 }
 
 /**
@@ -210,7 +225,7 @@ export interface TicketTree {
   tracker: TrackerKind;
   initiatives: Initiative[];
   backlog: Leaf[];
-  /** Layout the tree was read from. `v6` trees are read-only until migrated with `bmad migrate method`. */
+  /** Layout the tree was read from. `v6` trees are edited in v6's own formats. */
   layout: 'ticket-tree' | 'v6';
   problems: string[];
   /** Team-wide board settings from `_bmad/custom/bmad-board.toml`; defaults when the file is absent. */

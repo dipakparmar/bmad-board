@@ -21,13 +21,14 @@ function describe(c: TicketChange): string {
     case 'add-entry': return `add "${c.entry.title}" to ${c.folder}`;
     case 'reorder': return `reorder ${c.folder}`;
     case 'edit-body': return `edit ${c.path}`;
+    case 'toggle-task': return `${c.checked ? 'tick' : 'untick'} task ${c.index + 1} of ${c.key}`;
     case 'file-bug': return `file bug "${c.title}"`;
   }
 }
 
 /** A TicketStore over any FileSource: the shared loader and planner plus the source's own commit. */
 /** Bump when the parsed tree's shape changes, so trees cached by an older board are not reused. */
-const TREE_FORMAT = 3;
+const TREE_FORMAT = 4;
 
 export class FileTicketStore implements TicketStore {
   private tree: TicketTree | null = null;

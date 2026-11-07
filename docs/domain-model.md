@@ -83,7 +83,7 @@ BMAD's agents run in the person's coding tool, not in the board. So the board's 
 |---|---|---|
 | `LocalStore` | small Bun server beside a working copy | files + a commit on the current branch, never push |
 | `GitHubRepoStore` | GitHub contents/git API | commit to a branch, or open/update a PR |
-| `V6Store` | old `_bmad-output/*-artifacts` layout | read-only; the UI suggests `bmad migrate method` |
+| v6 layout | old `_bmad-output/*-artifacts` layout | same stores; `store/changes-v6.ts` writes edits in v6's formats |
 | `GitHubIssuesStore` (later) | gh/REST, following BMAD's `github-ticketing.toml` | labels, sub-issues, blocked-by, milestones |
 
 The rules that write status follow BMAD: dragging into **done** is a person's action. Dragging into backlog, in-progress or review writes the matching status (`statusForDrop`), and is shown as a manual override of the agent's status.
@@ -92,5 +92,5 @@ The rules that write status follow BMAD: dragging into **done** is a person's ac
 
 - **GitHub writes go through a pull request.** One `bmad-board/<timestamp>` branch and one PR per editing session, with one commit per board action.
 - **Plans and code review show read-only.** The detail view shows the plan body (the build's criteria and its `## Code Review` blocks). Agents own those files.
-- **v6 projects are read-only.** The board points to `bmad migrate method` instead of writing the old layout.
+- **v6 projects are edited in v6's formats.** Status in sprint-status.yaml and the story file, assignee and block as lines in the story file, new stories in the epics file; line-level edits keep comments and order. `bmad migrate method` is optional.
 - **The local server commits but never pushes**, the same as BMAD's repo store.

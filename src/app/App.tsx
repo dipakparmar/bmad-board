@@ -1,4 +1,4 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Info, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Toaster } from 'sonner';
 import { KanbanBoard } from '@/components/board/kanban-board';
@@ -21,9 +21,18 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { BoardProvider, useBoardContext } from './board-context';
 import { useShortcuts } from './use-shortcuts';
 
+const V6_NOTICE_KEY = 'bmad-board:v6-notice-hidden';
+
 function Notices() {
   const { board } = useBoardContext();
-  const [hidden, setHidden] = useState<string[]>([]);
+  const [hidden, setHiddenState] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(V6_NOTICE_KEY) ?? '[]') as string[]; } catch { return []; }
+  });
+  const setHidden = (f: (h: string[]) => string[]) => setHiddenState((h) => {
+    const next = f(h);
+    try { localStorage.setItem(V6_NOTICE_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
   const v6 = board.workspaces.filter((w) => w.tree?.layout === 'v6');
   const problems = board.workspaces.flatMap((w) => (w.tree?.problems ?? []).map((p) => `${w.store.label}: ${p}`));
   if (!v6.length && !problems.length) return null;
@@ -31,10 +40,10 @@ function Notices() {
     <div className="flex flex-col gap-2 px-5 pt-3">
       {v6.map((w) => (
         hidden.includes(w.store.id) ? null : (
-          <div key={w.store.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-1.5 text-xs" title={`${w.store.label} uses the BMAD v6 layout`}>
-            <AlertTriangle className="size-3.5 shrink-0 text-warning" />
-            <span className="min-w-0 truncate"><strong className="font-medium">v6 sprint{w.tree?.sprint?.project ? ` · ${w.tree.sprint.project}` : ''}, read-only.</strong>{w.tree?.sprint?.lastUpdated || w.tree?.sprint?.generated ? ` Updated ${w.tree.sprint.lastUpdated ?? w.tree.sprint.generated}.` : ''} Run <code>bmad migrate method</code> in <span className="font-mono">{w.store.label}</span> to edit tickets here.</span>
-            <button type="button" aria-label="Dismiss" className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground hover:bg-warning/15" onClick={() => setHidden((h) => [...h, w.store.id])}><X className="size-3.5" /></button>
+          <div key={w.store.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground" title={`${w.store.label} uses the BMAD v6 layout. \`bmad migrate method\` moves it to the ticket tree, if you ever want to.`}>
+            <Info className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate"><strong className="font-medium text-foreground">v6 sprint{w.tree?.sprint?.project ? ` · ${w.tree.sprint.project}` : ''}.</strong>{w.tree?.sprint?.lastUpdated || w.tree?.sprint?.generated ? ` Updated ${w.tree.sprint.lastUpdated ?? w.tree.sprint.generated}.` : ''} Edits are written to sprint-status.yaml and story files the way v6 writes them.</span>
+            <button type="button" aria-label="Dismiss" className="ml-auto shrink-0 rounded p-0.5 hover:bg-accent" onClick={() => setHidden((h) => [...h, w.store.id])}><X className="size-3.5" /></button>
           </div>
         )
       ))}

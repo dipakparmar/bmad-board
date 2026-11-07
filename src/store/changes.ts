@@ -6,6 +6,8 @@ import { BOARD_CONFIG_PATH, boardConfigToml, type BreakdownEntry, type Leaf, typ
 import { replaceBody, setFrontmatter } from './frontmatter';
 import { joinPath, type FileSource, type FileWrite } from './file-source';
 import { allLeaves, titleSlug } from './load-tree';
+import { planV6Changes } from './changes-v6';
+import { setTask, V6EditError } from './v6-edit';
 import { appendTable, findTable, joinTables, reorderTables, setKey, splitTables, tableId, type TomlValue } from './toml-edit';
 
 export class ChangeError extends Error {}
@@ -47,7 +49,7 @@ function toToml(value: unknown): TomlValue | undefined {
 
 /** Plans one batch of changes. Reads each file at most once and applies later changes on top of earlier ones. */
 export async function planChanges(tree: TicketTree, src: FileSource, changes: TicketChange[]): Promise<FileWrite[]> {
-  if (tree.layout === 'v6') throw new ChangeError('This project uses the v6 layout, which the board shows read-only. Run `bmad migrate method` to edit it here.');
+  if (tree.layout === 'v6') return planV6Changes(tree, src, changes);
   const leaves = new Map(allLeaves(tree).map((l) => [l.key, l]));
   const pending = new Map<string, string | null>();
   const read = async (path: string) => (pending.has(path) ? pending.get(path) ?? null : src.read(path));
@@ -162,6 +164,19 @@ export async function planChanges(tree: TicketTree, src: FileSource, changes: Ti
         const text = await read(change.path);
         if (text === null) throw new ChangeError(`${change.path} does not exist`);
         write(change.path, replaceBody(text, change.body));
+        break;
+      }
+      case 'toggle-task': {
+        const leaf = leafOf(change.key);
+        const path = change.inFile ? leaf.file?.path : leaf.plan?.path;
+        if (!path) throw new ChangeError(`${change.key} has no ${change.inFile ? 'file' : 'build plan'}`);
+        const text = await read(path);
+        if (text === null) throw new ChangeError(`${path} does not exist`);
+        try {
+          write(path, setTask(text, change.index, change.checked));
+        } catch (e) {
+          throw e instanceof V6EditError ? new ChangeError(e.message) : e;
+        }
         break;
       }
       case 'file-bug': {

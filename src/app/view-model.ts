@@ -1,5 +1,5 @@
 /** Flattens loaded trees into the rows the board and list render. */
-import { whatsNext, type BoardState, type Epic, type Initiative, type Leaf, type TicketTree } from '../domain';
+import { LEAF_STATUSES, V6_PICKABLE, whatsNext, type BoardState, type LeafStatus, type Epic, type Initiative, type Leaf, type TicketTree } from '../domain';
 import { allLeaves, doneContainers } from '../store';
 
 /** Where a ticket stands in BMAD's "what's next" grouping. */
@@ -35,7 +35,7 @@ export function ticketsOf(workspaceId: string, workspace: string, tree: TicketTr
     for (const epic of initiative.epics) for (const l of epic.leaves) where.set(l.key, { initiative, epic });
     for (const l of initiative.leaves) where.set(l.key, { initiative });
   }
-  const readOnly = !writable || tree.layout === 'v6' || tree.tracker !== 'repo';
+  const readOnly = !writable || tree.tracker !== 'repo';
   const next = whatsNext(allLeaves(tree), doneContainers(tree));
   const readiness = new Map<string, { r: Readiness; waitingOn: string[]; reason?: string }>();
   for (const l of next.readyToStart) readiness.set(l.key, { r: 'ready', waitingOn: [] });
@@ -67,4 +67,9 @@ export function refOf(key: string, tickets: Ticket[]): string {
   const hit = tickets.find((t) => t.leaf.key === key);
   if (hit) return hit.ref;
   return key.startsWith('epic-') && !key.includes('/') ? key : key.replace(/^.*\//, '');
+}
+
+/** Statuses a person can set on this ticket: all of BMAD's, or v6's for a v6 story. */
+export function statusesFor(ticket: Ticket): readonly LeafStatus[] {
+  return ticket.leaf.v6 ? V6_PICKABLE : LEAF_STATUSES;
 }

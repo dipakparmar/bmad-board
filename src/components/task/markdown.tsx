@@ -21,8 +21,11 @@ function textOf(node: ReactNode): string {
  * With `refs`, ticket refs (`Story 1.2`), ticket file names and commit hashes in the text become links
  * that open the ticket or commit in the board.
  */
-export function Markdown({ source, className, onDocLink, refs }: { source: string; className?: string; onDocLink?: (href: string) => void; refs?: { resolver: RefResolver; onRef: (kind: string, value: string) => void } }) {
+/** With `onTask`, task-list checkboxes can be ticked; it gets the checkbox's index in the source, from 0. */
+export function Markdown({ source, className, onDocLink, refs, onTask }: { source: string; className?: string; onDocLink?: (href: string) => void; refs?: { resolver: RefResolver; onRef: (kind: string, value: string) => void }; onTask?: (index: number, checked: boolean) => void }) {
   const seen = new Map<string, number>();
+  // Checkboxes render in source order, so a running count is each one's index.
+  let task = 0;
   const heading = (Tag: 'h1' | 'h2' | 'h3' | 'h4') => ({ node: _n, children, ...props }: { node?: unknown; children?: ReactNode }) => {
     const base = headingSlug(textOf(Children.toArray(children)).replace(/[*_`]/g, ''));
     const n = seen.get(base) ?? 0;
@@ -38,6 +41,13 @@ export function Markdown({ source, className, onDocLink, refs }: { source: strin
       if (href?.startsWith('#')) return <a {...props} href={href} onClick={(e) => { e.preventDefault(); document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth' }); }} />;
       return <a {...props} href={href} target="_blank" rel="noreferrer" />;
     },
+    ...(onTask ? {
+      input: ({ node: _n, type, checked, disabled: _d, ...props }) => {
+        if (type !== 'checkbox') return <input type={type} {...props} />;
+        const index = task++;
+        return <input {...props} type="checkbox" checked={!!checked} aria-label={checked ? 'Untick task' : 'Tick task'} className="cursor-pointer" onChange={(e) => onTask(index, e.target.checked)} />;
+      },
+    } : {}),
     ...(onDocLink ? { h1: heading('h1'), h2: heading('h2'), h3: heading('h3'), h4: heading('h4') } : {}),
   };
   return (

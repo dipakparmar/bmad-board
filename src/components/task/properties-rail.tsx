@@ -3,8 +3,8 @@ import { ExternalLink, FileText } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { applyWithToast, setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
-import type { Ticket } from '@/app/view-model';
-import { HITL_LABEL, LEAF_STATUSES, RISK_LABELS, SEVERITY_LABELS, statusLabel, TYPE_LABELS, type LeafStatus, type Risk, type TicketChange } from '@/domain';
+import { statusesFor, type Ticket } from '@/app/view-model';
+import { HITL_LABEL, RISK_LABELS, SEVERITY_LABELS, statusLabel, TYPE_LABELS, type LeafStatus, type Risk, type TicketChange } from '@/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,7 +45,8 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
   const { leaf } = ticket;
   const [reason, setReason] = useState('');
   const ro = ticket.readOnly;
-  const hasEntry = leaf.id !== null && leaf.folder !== 'backlog';
+  // v6 stories have no tickets.toml entry, so no risk or needs-a-person to set.
+  const hasEntry = leaf.id !== null && leaf.folder !== 'backlog' && !leaf.v6;
 
   const edit = (change: TicketChange, msg: string) => applyWithToast(state, ticket.workspaceId, [change], msg);
 
@@ -59,7 +60,7 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
           <Select value={leaf.status || null} onValueChange={(v) => typeof v === 'string' && void setStatus(state, ticket, v as LeafStatus)}>
             <SelectTrigger size="sm" className="w-full" aria-label="Status"><SelectValue>{statusLabel(leaf.status)}</SelectValue></SelectTrigger>
             <SelectPopup>
-              {LEAF_STATUSES.map((s) => (
+              {statusesFor(ticket).map((s) => (
                 <SelectItem key={s} value={s}>
                   <span className="flex flex-col"><span>{statusLabel(s)} <span className="font-mono text-[10px] text-muted-foreground">{s}</span></span><span className="text-[11px] text-muted-foreground">{STATUS_HELP[s]}</span></span>
                 </SelectItem>
@@ -77,6 +78,8 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
           />
         )}
       </Row>
+      {!leaf.v6 && (
+        <>
       <Row label="Risk">
         {ro || !hasEntry ? (leaf.risk ? RISK_LABELS[leaf.risk].label : 'Not set') : (
           <Select value={leaf.risk ?? null} onValueChange={(v) => typeof v === 'string' && void edit({ kind: 'edit-entry', key: leaf.key, patch: { risk: v as Risk } }, `${ticket.ref} is now ${RISK_LABELS[v as Risk].label.toLowerCase()}`)}>
@@ -92,6 +95,8 @@ export function PropertiesRail({ ticket, className }: { ticket: Ticket; classNam
           </Button>
         )}
       </Row>
+        </>
+      )}
       <Row label="Type"><span title={TYPE_LABELS[leaf.type].help}>{TYPE_LABELS[leaf.type].label}</span>{leaf.file?.severity ? <span title={SEVERITY_LABELS[leaf.file.severity].help}> · {SEVERITY_LABELS[leaf.file.severity].label} ({leaf.file.severity})</span> : ''}</Row>
       <Row label="Epic">
         {ticket.epic ? <ContainerLink ticket={ticket} kind="epic" /> : leaf.folder === 'backlog' ? 'Backlog' : 'None'}

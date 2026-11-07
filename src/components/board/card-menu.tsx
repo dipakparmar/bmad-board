@@ -4,8 +4,8 @@ import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 import { setStatus } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
-import type { Ticket } from '@/app/view-model';
-import { LEAF_STATUSES, STATUS_LABELS } from '@/domain';
+import { statusesFor, type Ticket } from '@/app/view-model';
+import { STATUS_LABELS } from '@/domain';
 import { ContextMenu, ContextMenuPopup, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { MenuItem, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger } from '@/components/ui/menu';
 
@@ -25,7 +25,7 @@ export function CardMenu({ ticket, children }: { ticket: Ticket; children: React
           <MenuSub>
             <MenuSubTrigger>Set status</MenuSubTrigger>
             <MenuSubPopup>
-              {LEAF_STATUSES.map((s) => (
+              {statusesFor(ticket).map((s) => (
                 <MenuItem key={s} disabled={s === ticket.leaf.status} onClick={() => void setStatus(state, ticket, s)}>{STATUS_LABELS[s].label}</MenuItem>
               ))}
             </MenuSubPopup>

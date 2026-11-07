@@ -35,13 +35,20 @@ To use the built binary from this checkout, run `bun run link:local`. This symli
 
 GitHub repos you connect come back when you reload, and every project is cached in the browser by git: file text is kept by blob SHA (in IndexedDB, so it survives reloads and is shared across repos and branches), and the parsed board is kept with the versions of the exact files it read. On reload the board asks for the current file versions in one call (GitHub's branch ref and tree; the local server's `/api/tree`, from `git ls-files` plus `git hash-object` for uncommitted edits), reuses the board outright when none of its files changed, and otherwise fetches only the files whose content changed. Commits that only touch code cost nothing. **Clear cache and reload** in Settings (or a project's ··· menu in the sidebar) starts fresh.
 
-Projects on the older v6 layout open read-only, parsed the way v6's workflows write them:
+Projects on the older v6 layout are read the way v6's workflows write them, and edited the same way:
 - `sprint-status.yaml` (paths from `_bmad/bmm/config.yaml`): project metadata, epic statuses, stories including split ones (`2-6a-…`), retrospectives and their action items. Legacy statuses (`drafted`, `contexted`) are mapped.
 - `epics.md` or sharded `epics/epic-N.md`: epic titles and goals, plus stories that sprint planning hasn't picked up yet, which show as backlog.
 - Story files (`N-M-slug.md` in `story_location`): title, `Status:`, the user story, acceptance criteria, and the Tasks / Subtasks checklist, which shows as progress on the card. When a story file and sprint-status.yaml disagree, the later status wins, as in v6.
 - Retro action items show in the stand-up wrap-up. Each story links to its section of the epics file, its `[Source: …]` citations, and the planning docs.
 
-Run `bmad migrate method` to move a v6 project to the ticket tree and edit it here.
+Edits to a v6 project change only the lines they mean to, so comments, blank lines and key order stay as BMAD wrote them, and BMAD's own sprint-planning, create-story and dev-story keep working on the files:
+- **Status** goes to `development_status` in sprint-status.yaml and to the story file's `Status:` line (both, since v6 reads the later of the two). Only v6's statuses are written: ready-for-dev, in-progress, review, done. Code review and built are `review`. The epic turns `in-progress` when a story starts and `done` when every story is; `last_updated` is stamped as `MM-DD-YYYY HH:MM`. v6 has no dropped status, so the board doesn't offer it.
+- **Assignee** and **Blocked** are `Assignee:` and `Blocked: reason (since date)` lines under `Status:` in the story file. v6 has no field for either, and a mapping in sprint-status.yaml would break sprint-planning. Assigning or blocking a story that has no story file yet creates one from v6's create-story template, filled with the story and acceptance criteria from the epics file, and moves it to ready-for-dev.
+- **Tasks**: tick the Tasks / Subtasks checkboxes in the ticket panel.
+- **Title and description**: the story's section in the epics file until it has a story file, and the story file after that (v6 never rewrites the epics file once create-story ran). Renaming a story in the epics file renames its sprint-status key to match, as sprint-planning would derive it.
+- **New stories** (New ticket, or `c`) go at the end of the epic in the epics file as `### Story N.M: Title`, with a `backlog` key in sprint-status.yaml.
+
+`bmad migrate method` still moves a v6 project to the ticket tree if you want it.
 
 ## What you can do on the board
 
@@ -93,4 +100,4 @@ bun test && bun run typecheck
 
 The UI borrows Kaneo's primitives and theme; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-`examples/shop` is a small ticket-tree project and `examples/legacy-v6` a v6 one; tests run against both.
+`examples/shop` is a small ticket-tree project, `examples/legacy-v6` a v6 one, and `examples/v6-template` a v6 project built from BMAD v6.12's own templates (its sprint-status.yaml is the shipped template, unchanged); tests run against all three, and check edited v6 files against the same rules as BMAD's `sprint_plan.py validate`.

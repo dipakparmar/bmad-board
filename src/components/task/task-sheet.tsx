@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUpRight, Copy, FileText, Link2, Maximize2, Minimize2, X
 import { cn } from '@/lib/cn';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
+import { applyWithToast } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
 import { bodyOf, refOf, type Ticket } from '@/app/view-model';
 import { Button } from '@/components/ui/button';
@@ -193,7 +194,11 @@ export function TicketDetail({ ticket: t, full }: { ticket: Ticket; full?: boole
 
 function PlanBody({ ticket }: { ticket: Ticket }) {
   const refs = useTicketRefs(ticket);
-  return <Markdown source={ticket.leaf.plan?.body ?? ''} refs={refs} />;
+  const state = useBoardContext();
+  const onTask = ticket.readOnly ? undefined : (index: number, checked: boolean) => {
+    void applyWithToast(state, ticket.workspaceId, [{ kind: 'toggle-task', key: ticket.leaf.key, index, checked }], `${checked ? 'Ticked' : 'Unticked'} a task on ${ticket.ref}`);
+  };
+  return <Markdown source={ticket.leaf.plan?.body ?? ''} refs={refs} onTask={onTask} />;
 }
 
 /** The sheet's title must be a SheetTitle for accessibility; the full page uses a plain heading. */

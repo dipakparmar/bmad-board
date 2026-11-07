@@ -109,16 +109,20 @@ describe('FileTicketStore.apply', () => {
     expect(entries[2]?.title).toBe('Show savings');
   });
 
+  test('toggle-task ticks a build-plan checkbox and keeps the rest', async () => {
+    const { src, store } = await setup();
+    const path = `${PRICING}/story-apply-and-refuse-discount-codes-plan.md`;
+    const before = (await src.read(path)) ?? '';
+    await store.apply([{ kind: 'toggle-task', key: 'epic-pricing-rules/2', index: 1, checked: true }], person);
+    expect(await src.read(path)).toBe(before.replace('- [ ] Refusal reason', '- [x] Refusal reason'));
+    expect(src.commits.at(-1)?.message).toStartWith('chore(tickets): tick task 2 of epic-pricing-rules/2');
+  });
+
   test('file-bug writes a standalone ticket to backlog/', async () => {
     const { store } = await setup();
     const { paths } = await store.apply([{ kind: 'file-bug', title: 'Coupon field accepts spaces', body: 'Trailing spaces make valid codes fail.' }], person);
     expect(paths).toEqual(['_bmad-output/backlog/bug-coupon-field-accepts-spaces.md']);
     const tree = await store.load();
     expect(tree.backlog.map((l) => l.title)).toContain('Coupon field accepts spaces');
-  });
-
-  test('v6 projects are read-only', async () => {
-    const { store } = await setup('legacy-v6');
-    expect(store.apply([{ kind: 'mark', key: 'epic-1/3', status: 'in-progress' }], person)).rejects.toThrow('bmad migrate method');
   });
 });

@@ -11,10 +11,13 @@
  *   a `Status:` line, `## Story`, `## Acceptance Criteria`, `## Tasks / Subtasks` checkboxes, `## Dev Notes`
  *   with `[Source: …]` citations, `## Dev Agent Record`, `## Change Log`.
  *
- * v6 trees are shown read-only; `bmad migrate method` turns them into the ticket tree.
+ * The board edits these files in place (store/changes-v6.ts); `bmad migrate method` stays optional.
  */
 import { parse } from 'yaml';
 import type { LeafStatus } from './status';
+
+/** Board statuses a v6 story can be set to: v6's own four past backlog, and a block. */
+export const V6_PICKABLE: LeafStatus[] = ['ready-for-dev', 'in-progress', 'in-review', 'done', 'blocked'];
 
 export type V6StoryStatus = 'backlog' | 'ready-for-dev' | 'in-progress' | 'review' | 'done' | 'blocked';
 export type V6EpicStatus = 'backlog' | 'in-progress' | 'done';
@@ -208,7 +211,23 @@ export interface V6StoryFile {
   tasks?: string;
   /** Review follow-ups the code review left (`[AI-Review]` items still open). */
   openReviewItems: number;
+  /** `Assignee:` and `Blocked:` lines the board writes under `Status:`; v6 has no field for either. */
+  assignee?: string;
+  blocked?: { reason: string; since?: string };
 }
+
+/** `Blocked: reason (since 2026-11-07)`. */
+export function blockedLine(reason: string, since?: string): string {
+  return since ? `${reason} (since ${since})` : reason;
+}
+
+function parseBlocked(raw: string | undefined): V6StoryFile['blocked'] {
+  if (!raw?.trim()) return undefined;
+  const m = /^(.*?)\s*\(since (\d{4}-\d{2}-\d{2})\)\s*$/.exec(raw.trim());
+  return m ? { reason: m[1] || 'blocked', since: m[2] } : { reason: raw.trim() };
+}
+
+const field = (body: string, name: string) => new RegExp(`^\\s*(?:\\*\\*)?${name}(?:\\*\\*)?\\s*:\\s*(?:\\*\\*)?\\s*(.+?)\\s*$`, 'im').exec(body)?.[1]?.replace(/\*\*$/, '').trim() || undefined;
 
 /** Sections of a v6 story file, keyed by their `##` heading, lowercased. */
 function sections(body: string): Map<string, string> {
@@ -241,5 +260,7 @@ export function parseStoryFile(body: string): V6StoryFile {
     acceptance: s.get('acceptance criteria'),
     tasks,
     openReviewItems: [...(tasks ?? '').matchAll(/^\s*[-*]\s+\[ \]\s+\[AI-Review\]/gim)].length,
+    assignee: field(body, 'Assignee'),
+    blocked: parseBlocked(field(body, 'Blocked')),
   };
 }

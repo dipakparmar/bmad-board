@@ -42,7 +42,7 @@ function WorkspaceHeader({ w, onSelect, onReload, onClearCache, onRemove }: { w:
   const { name, branch } = splitLabel(w.store.label);
   const v6 = w.tree?.layout === 'v6';
   const mode = v6 ? 'v6' : w.store.capabilities.pullRequests ? 'PR' : w.store.capabilities.write ? 'git' : 'read';
-  const modeHelp = v6 ? 'BMAD v6 layout: read-only until you run `bmad migrate method`' : mode === 'PR' ? 'Changes go to a pull request' : mode === 'git' ? 'Changes are committed on this branch' : 'Read-only';
+  const modeHelp = v6 ? `BMAD v6 layout: edits go to sprint-status.yaml, the epics file and story files in v6's format${w.store.capabilities.pullRequests ? ', on a pull request' : w.store.capabilities.write ? ', committed on this branch' : ''}` : mode === 'PR' ? 'Changes go to a pull request' : mode === 'git' ? 'Changes are committed on this branch' : 'Read-only';
   return (
     <div className="group flex min-w-0 items-start gap-2 px-2 py-1">
       <Icon className="mt-0.5 size-3.5 shrink-0 text-sidebar-foreground/60" />
@@ -50,7 +50,7 @@ function WorkspaceHeader({ w, onSelect, onReload, onClearCache, onRemove }: { w:
         <span className="truncate text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/70 hover:text-sidebar-foreground">{name}</span>
         {branch && <span className="flex min-w-0 items-center gap-1 text-[11px] text-sidebar-foreground/50"><GitBranch className="size-3 shrink-0" /><span className="truncate">{branch}</span></span>}
       </button>
-      <span title={modeHelp} className={cn('shrink-0 rounded px-1 py-px text-[10px]', v6 ? 'bg-warning/15 text-warning-foreground' : 'bg-sidebar-accent')}>{mode}</span>
+      <span title={modeHelp} className={cn('shrink-0 rounded px-1 py-px text-[10px]', 'bg-sidebar-accent')}>{mode}</span>
       <Menu>
         <MenuTrigger render={<button type="button" aria-label={`${w.store.label} options`} className="shrink-0 rounded px-1 text-[11px] opacity-0 hover:bg-sidebar-accent group-hover:opacity-100 focus-visible:opacity-100">···</button>} />
         <MenuPopup align="end">

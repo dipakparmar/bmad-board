@@ -1,10 +1,11 @@
 /**
  * Reads a BMAD v6 project (see `domain/sprint-v6.ts` for the formats) into the board's tree, read-only.
  * Paths come from `_bmad/bmm/config.yaml` (`planning_artifacts`, `implementation_artifacts`) and the
- * sprint file's `story_location`, with v6's defaults when they are missing. Migrate with
- * `bmad migrate method` to edit.
+ * sprint file's `story_location`, with v6's defaults when they are missing. Each story carries a `v6`
+ * ref so `changes-v6.ts` can write its edits back in v6's own format.
  */
 import { parse } from 'yaml';
+import { v6Slug } from './v6-edit';
 import {
   boardState, docKind, docLinks, laterStatus, leafStatusFromV6, parseEpicsDoc, parseSprintStatus, parseStoryFile,
   type DocLink, type Epic, type Leaf, type LeafLinks, type TicketKey, type TicketTree, type V6EpicsDoc,
@@ -138,7 +139,8 @@ export async function loadV6Tree(src: FileSource, outputFolder: string): Promise
       docs = [...docLinks({ body }, { baseDir: path.slice(0, path.lastIndexOf('/')), outputFolder: paths.output }), ...docs];
     }
     const v6 = laterStatus(yamlStatus, parsed?.status ?? (path ? 'ready-for-dev' : null));
-    const status = leafStatusFromV6(v6);
+    const status = parsed?.blocked && v6 !== 'done' ? 'blocked' : leafStatusFromV6(v6);
+    const assignee = parsed?.assignee ?? owner;
     const id = /^\d+$/.test(story) ? Number(story) : story;
     const title = planned?.title || parsed?.title || slugTitle(slug);
     return {
@@ -150,7 +152,14 @@ export async function loadV6Tree(src: FileSource, outputFolder: string): Promise
       },
       file, after: [], gatedBy: [], hitl: false, status, state: boardState(status), docs,
       // The story file's task list is its build checklist, and `owner` (when a team adds one) its assignee.
-      plan: path || owner ? { path: path ?? statusPath, ticket: key ?? `${num}-${story}`, status, assignee: owner, body: parsed?.tasks ?? '' } : undefined,
+      plan: path || assignee ? {
+        path: path ?? statusPath, ticket: key ?? `${num}-${story}`, status, assignee, body: parsed?.tasks ?? '',
+        blockedReason: parsed?.blocked?.reason, blockedAt: parsed?.blocked?.since,
+      } : undefined,
+      v6: {
+        sprintKey: key ?? `${num}-${story}-${v6Slug(planned?.title || slug)}`, epic: num, story, inSprint: !!key,
+        epicsPath: planned ? epicsFile.files.get(num) ?? epicsFile.path : undefined, storyDir: storyDir ?? paths.implementation,
+      },
     };
   };
 

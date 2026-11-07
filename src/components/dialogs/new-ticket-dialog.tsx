@@ -1,4 +1,7 @@
-/** Adds an entry to an epic's tickets.toml, or files a standalone bug in backlog/, the way the PO agent would. */
+/**
+ * Adds an entry to an epic's tickets.toml, or files a standalone bug in backlog/, the way the PO agent would.
+ * On a v6 project it adds `### Story N.M` to the epic in the epics file, as create-epics-and-stories does.
+ */
 import { useMemo, useState } from 'react';
 import { applyWithToast } from '@/app/actions';
 import { useBoardContext } from '@/app/board-context';
@@ -14,14 +17,19 @@ interface Target {
   label: string;
   workspaceId: string;
   folder: string;
+  v6?: boolean;
 }
 
 export function NewTicketDialog() {
   const state = useBoardContext();
   const { dialog, setDialog, board, scope } = state;
   const targets = useMemo<Target[]>(() => board.workspaces.flatMap((w) => {
-    if (!w.tree || !w.store.capabilities.write || w.tree.layout === 'v6' || w.tree.tracker !== 'repo') return [];
+    if (!w.tree || !w.store.capabilities.write || w.tree.tracker !== 'repo') return [];
     const out: Target[] = [];
+    if (w.tree.layout === 'v6') {
+      for (const e of w.tree.initiatives.flatMap((i) => i.epics)) out.push({ value: `${w.store.id}::${e.slug}`, label: `Epic ${e.id}: ${e.title} · ${w.store.label}`, workspaceId: w.store.id, folder: e.slug, v6: true });
+      return out;
+    }
     for (const i of w.tree.initiatives) {
       if (i.children) continue;
       for (const e of i.epics) out.push({ value: `${w.store.id}::${e.slug}`, label: `${e.title} · ${w.store.label}`, workspaceId: w.store.id, folder: e.slug });
@@ -42,6 +50,7 @@ export function NewTicketDialog() {
   const [hitl, setHitl] = useState(false);
   const chosen = targets.find((t) => t.value === (target ?? preferred?.value));
   const isBug = chosen?.folder === 'backlog';
+  const v6 = !!chosen?.v6;
 
   function reset() {
     setTarget(null); setType('story'); setTitle(''); setDescription(''); setVerify(''); setAfter(''); setRisk('low'); setHitl(false);
@@ -55,7 +64,7 @@ export function NewTicketDialog() {
       : await applyWithToast(state, chosen.workspaceId, [{
         kind: 'add-entry', folder: chosen.folder,
         entry: {
-          type, title: title.trim(), description: description.trim(), verify: verify.trim() || undefined, covers: [],
+          type: v6 ? 'story' : type, title: title.trim(), description: description.trim(), verify: verify.trim() || undefined, covers: [],
           after: after.split(',').map((a) => a.trim()).filter(Boolean).map((a) => (/^\d+$/.test(a) ? Number(a) : a)), hitl, risk,
         },
       }], `Added "${title.trim()}"`);
@@ -71,7 +80,9 @@ export function NewTicketDialog() {
         <form className="contents" onSubmit={(e) => void submit(e)}>
           <DialogHeader>
             <DialogTitle>New ticket</DialogTitle>
-            <DialogDescription>Adds an entry to the epic's <code>tickets.toml</code> in build order. The build agent plans its acceptance criteria when it builds it.</DialogDescription>
+            <DialogDescription>{v6
+              ? <>Adds the next <code>Story N.M</code> to the epic in the epics file, and lists it in <code>sprint-status.yaml</code> as backlog. create-story writes its story file.</>
+              : <>Adds an entry to the epic's <code>tickets.toml</code> in build order. The build agent plans its acceptance criteria when it builds it.</>}</DialogDescription>
           </DialogHeader>
           <DialogPanel className="flex flex-col gap-3">
             {targets.length === 0 ? <p className="text-sm text-muted-foreground">Connect a writable project first: the local server, or a GitHub repo with a token.</p> : (
@@ -81,7 +92,7 @@ export function NewTicketDialog() {
                     <SelectTrigger aria-label="Where"><SelectValue>{chosen?.label}</SelectValue></SelectTrigger>
                     <SelectPopup>{targets.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectPopup>
                   </Select>
-                  {!isBug && (
+                  {!isBug && !v6 && (
                     <Select value={type} onValueChange={(v) => typeof v === 'string' && setType(v as LeafType)}>
                       <SelectTrigger aria-label="Type" className="w-28"><SelectValue>{TYPE_LABELS[type].label}</SelectValue></SelectTrigger>
                       <SelectPopup>{(['story', 'spike', 'bug'] as const).map((t) => <SelectItem key={t} value={t}>{TYPE_LABELS[t].label}</SelectItem>)}</SelectPopup>
@@ -89,8 +100,9 @@ export function NewTicketDialog() {
                   )}
                 </div>
                 <Input required autoFocus placeholder={isBug ? 'What is broken' : 'What works when it is done'} value={title} onChange={(e) => setTitle(e.target.value)} />
-                <Textarea placeholder={isBug ? 'Steps, expected, actual' : 'One sentence on what it delivers'} value={description} onChange={(e) => setDescription(e.target.value)} />
-                {!isBug && (
+                <Textarea placeholder={isBug ? 'Steps, expected, actual' : v6 ? 'As a …,\nI want …,\nSo that ….' : 'One sentence on what it delivers'} value={description} onChange={(e) => setDescription(e.target.value)} />
+                {v6 && <Textarea placeholder={'Acceptance criteria\n**Given** …\n**When** …\n**Then** …'} value={verify} onChange={(e) => setVerify(e.target.value)} />}
+                {!isBug && !v6 && (
                   <>
                     <Input placeholder="Verify: how it will be checked" value={verify} onChange={(e) => setVerify(e.target.value)} />
                     <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
@@ -108,7 +120,7 @@ export function NewTicketDialog() {
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
-            <Button type="submit" disabled={!chosen || !title.trim()}>{isBug ? 'File bug' : 'Add ticket'}</Button>
+            <Button type="submit" disabled={!chosen || !title.trim()}>{isBug ? 'File bug' : v6 ? 'Add story' : 'Add ticket'}</Button>
           </DialogFooter>
         </form>
       </DialogPopup>

@@ -5,7 +5,8 @@
  * Planned adapters:
  * - LocalStore: a small Bun server next to a working copy; reads/writes files and commits on the current branch.
  * - GitHubRepoStore: the same files through the GitHub contents/git API; writes as commits on a branch or a PR.
- * - V6Store: read-only view of the old `_bmad-output/{planning,implementation}-artifacts` layout.
+ * - v6 projects (`_bmad-output/{planning,implementation}-artifacts`) go through the same stores; their
+ *   changes are written in v6's own formats (see store/changes-v6.ts).
  * - later, GitHubIssuesStore: mirrors leaves to issues the way BMAD's github-ticketing config does.
  */
 import type { BoardConfig } from './board-config';
@@ -40,6 +41,11 @@ export type TicketChange =
   | { kind: 'add-entry'; folder: string; entry: Omit<BreakdownEntry, 'id'> }
   | { kind: 'reorder'; folder: string; order: (number | string)[] }
   | { kind: 'edit-body'; path: string; body: string }
+  /**
+   * Ticks or unticks the `index`th checkbox of a ticket's build plan (v6: its story file's tasks), or with
+   * `inFile`, of its own file as the description shows it.
+   */
+  | { kind: 'toggle-task'; key: TicketKey; index: number; checked: boolean; inFile?: boolean }
   | { kind: 'file-bug'; title: string; body: string };
 
 export interface ChangeResult {
