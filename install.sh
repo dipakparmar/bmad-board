@@ -6,7 +6,7 @@
 #
 # While the repo is private, the second form works: it and the download below use your `gh` login.
 #
-# BMAD_BOARD_VERSION=v0.2.0 picks a release; BMAD_BOARD_INSTALL_DIR picks the folder
+# BMAD_BOARD_VERSION=v1.0.0 picks a release; BMAD_BOARD_INSTALL_DIR picks the folder
 # (default /usr/local/bin when writable, else ~/.local/bin).
 set -eu
 

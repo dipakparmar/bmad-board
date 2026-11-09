@@ -1,20 +1,42 @@
 name: Release
 
-# Push a tag like v0.2.0 to build the bmad-board executables and attach them to a GitHub release.
+# On every push to main, semantic-release picks the next version from the commit messages,
+# tags it and opens a draft GitHub release; the executables are then built, attached, and the
+# release is published. A push with no feat/fix/breaking commits releases nothing.
 on:
   push:
-    tags: ['v*']
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Tag to release (must exist), e.g. v0.2.0
-        required: true
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile
+      - run: bunx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - id: tag
+        run: echo "tag=$(git tag --points-at HEAD 'v*' | head -1)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
+    if: needs.version.outputs.tag != ''
     strategy:
       fail-fast: true
       matrix:
@@ -25,12 +47,12 @@ jobs:
           - { os: ubuntu-latest, target: linux-arm64, native: false }
     runs-on: ${{ matrix.os }}
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.TAG }}
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - run: bun install --frozen-lockfile
       - name: Stamp the version from the tag
         run: bun -e 'const p=await Bun.file("package.json").json(); p.version=process.env.TAG.replace(/^v/,""); await Bun.write("package.json", JSON.stringify(p,null,2)+"\n")'
@@ -53,24 +75,24 @@ jobs:
           cd release
           cp bmad-board-${{ matrix.target }} bmad-board
           tar -czf bmad-board-${{ matrix.target }}.tar.gz bmad-board
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: bmad-board-${{ matrix.target }}
           path: release/bmad-board-${{ matrix.target }}.tar.gz
 
-  release:
-    needs: build
+  publish:
+    needs: [version, build]
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ needs.version.outputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: dist
           merge-multiple: true
       - run: cd dist && sha256sum *.tar.gz > checksums.txt && cat checksums.txt
-      - name: Publish
+      - name: Attach executables and publish
         run: |
-          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber dist/*.tar.gz dist/checksums.txt
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --draft=false --latest
