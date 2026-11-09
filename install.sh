@@ -39,7 +39,7 @@ mkdir -p "$dir"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-echo "Downloading $asset…"
+echo "Downloading ${asset}…"
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   # gh reaches private repos too.
   gh release download ${BMAD_BOARD_VERSION:-} -R "$repo" -p "$asset" -p checksums.txt -D "$tmp"
