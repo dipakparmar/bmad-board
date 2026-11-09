@@ -179,11 +179,12 @@ export class LocalServerSource implements SnapshotSource {
       if (unavailable) return;
       try {
         const response = await fetch(`${this.base}/api/gh/repos/${encodeURIComponent(repo[1]!)}/${encodeURIComponent(repo[2]!)}/commits/${encodeURIComponent(sha)}`, { headers: { 'x-bmad-board': '1' }, signal: AbortSignal.timeout(5000) });
-        if (!response.ok) {
+        if (!response.ok && response.status !== 404 && response.status !== 422) {
           if (response.status === 401 || response.status === 403) unavailable = true;
           return;
         }
-        const discovered = membersFromGitHubAccounts([await response.json() as GitHubPeopleCommit]);
+        // 404/422: GitHub doesn't have this commit; cache the empty answer so it isn't asked again.
+        const discovered = response.ok ? membersFromGitHubAccounts([await response.json() as GitHubPeopleCommit]) : [];
         accounts.push(...discovered);
         try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), members: discovered })); } catch { /* optional cache */ }
       } catch { /* network and GitHub access are optional; retain the local roster */ }

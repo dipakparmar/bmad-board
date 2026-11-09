@@ -102,10 +102,12 @@ async function people() {
   const head = (await git(['rev-parse', 'HEAD'])).out;
   if (peopleCache?.head !== head) {
     const log = await git(['log', `-n${PEOPLE_COMMITS}`, `--since=${PEOPLE_DAYS}.days`, '--format=%an%x1f%ae%x1f%aI%x1f%(trailers:key=Changed-by,valueonly,separator=%x2C)%x1f%(trailers:key=Co-authored-by,valueonly,separator=%x0A)%x1f%cn%x1f%ce%x1f%H%x1e']);
+    // Commits on no remote can't be looked up on GitHub, so they go out without a SHA.
+    const unpushed = new Set((await git(['rev-list', `-n${PEOPLE_COMMITS}`, 'HEAD', '--not', '--remotes'])).out.split('\n').filter(Boolean));
     const lines = log.ok
       ? log.out.split('\x1e').map((l) => l.trim()).filter(Boolean).map((l) => {
           const [name = '', email = '', date = '', changedBy = '', coAuthors = '', committerName = '', committerEmail = '', sha = ''] = l.split('\x1f');
-          return { name, email, date, changedBy: changedBy.trim() || undefined, coAuthors: coAuthors.trim() || undefined, committerName, committerEmail, sha };
+          return { name, email, date, changedBy: changedBy.trim() || undefined, coAuthors: coAuthors.trim() || undefined, committerName, committerEmail, sha: unpushed.has(sha) ? '' : sha };
         })
       : [];
     peopleCache = { head, lines };

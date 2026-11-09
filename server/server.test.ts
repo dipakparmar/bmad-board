@@ -94,6 +94,19 @@ describe('local server', () => {
     expect((await source.history('.', 1))[0]?.changedBy).toBe('person:Human Contributor');
   });
 
+  test('people lines carry SHAs only for commits a remote has', async () => {
+    const remote = mkdtempSync(join(tmpdir(), 'bmad-board-remote-'));
+    Bun.spawnSync(['git', 'init', '-q', '--bare', remote]);
+    sh('git', 'remote', 'add', 'origin', remote);
+    sh('git', 'push', '-q', 'origin', 'main');
+    sh('git', 'commit', '--allow-empty', '-qm', 'local only');
+    const { lines } = (await (await fetch(`${base}/api/people`)).json()) as { lines: { sha: string }[] };
+    expect(lines[0]?.sha).toBe('');
+    expect(lines[1]?.sha).toBe(sh('git', 'rev-parse', 'HEAD~1'));
+    sh('git', 'remote', 'remove', 'origin');
+    rmSync(remote, { recursive: true, force: true });
+  });
+
   test('lends the gh CLI login to GitHub calls without exposing the token', async () => {
     expect(await ghCliStatus(base)).toEqual({ available: true, login: 'octo' });
     const res = await fetch(`${base}/api/gh/repos/o/r/contributors?per_page=100`, { headers: { 'x-bmad-board': '1' } });
